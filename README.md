@@ -28,6 +28,8 @@ Applied to:
 - the figure in the **shop**
 - the arm sprites in the **treasure room**, including the rock-paper-scissors relic fight
 - the character **portrait** in the top bar and the multiplayer party strip
+- the little character **head icons** marking each player's vote on map nodes (and on treasure-room and
+  event votes), plus the single-player map marker
 - the player's **map ink** and **map pings**
 - the **remote targeting line** drawn during another player's turn
 

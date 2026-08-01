@@ -268,12 +268,19 @@ public static class PlayerTint
         public Player Player { get; set; } = player;
     }
 
+    /// <remarks>
+    /// Writes RGB but keeps whatever alpha the node currently has. Several of these nodes are faded in and
+    /// out by tweens that animate <c>modulate:a</c> alone (the multiplayer vote icons, for one); restoring
+    /// the remembered alpha would snap them to full opacity mid-fade.
+    /// </remarks>
     private static void Repaint(CanvasItem node, TintedNode entry)
     {
         var variation = For(entry.Player);
-        node.Modulate = variation == null
+        var tinted = variation == null
             ? entry.BaseModulate
             : Combine(entry.BaseModulate, Modulate(variation.Value));
+
+        node.Modulate = new Color(tinted.R, tinted.G, tinted.B, node.Modulate.A);
     }
 
     /// <summary>
