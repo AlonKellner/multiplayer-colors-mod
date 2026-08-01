@@ -368,6 +368,69 @@ public class ShiftTests
         Assert.True(HueDelta(green.H, cooler.H) > 0f, "cooling a green should move it towards teal");
     }
 
+    /// <summary>
+    /// Colours a modded character could plausibly declare — including the ones the base class defaults to.
+    /// <c>CharacterModel.MapDrawingColor</c> and <c>RemoteTargetingLineColor</c> are both virtual with a
+    /// <c>Colors.Black</c> default, so "never overrode it" is a real case, not a hypothetical. (The
+    /// Understudy, the sibling repo's character, inherits the black targeting line today.)
+    /// </summary>
+    public static TheoryData<string, string> DegenerateInks => new()
+    {
+        { "unset default (black)", "000000" },
+        { "pure white", "FFFFFF" },
+        { "mid grey", "808080" },
+        { "near-black", "0A0A0A" },
+        { "near-white", "F4F4F4" },
+        { "fully saturated red", "FF0000" },
+        { "very dark blue", "000033" },
+    };
+
+    [Theory]
+    [MemberData(nameof(DegenerateInks))]
+    public void EveryVariationIsDistinctEvenForAwkwardModColours(string description, string hex)
+    {
+        // Without the value/saturation guards, black ink returns pure black for darker, warmer AND cooler —
+        // three of four players drawing in the same colour. This is the whole of mod-colour support.
+        var ink = new Color(hex);
+
+        var seen = new Dictionary<string, PlayerVariation>();
+        foreach (PlayerVariation v in Enum.GetValues<PlayerVariation>())
+        {
+            var html = PlayerTint.Shift(v, ink).ToHtml(false);
+            Assert.False(
+                seen.TryGetValue(html, out var clash),
+                $"{description}: {v} and {clash} both produce #{html}");
+            seen[html] = v;
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(DegenerateInks))]
+    public void AwkwardModColoursStillProduceValidColours(string description, string hex)
+    {
+        var ink = new Color(hex);
+        foreach (PlayerVariation v in Enum.GetValues<PlayerVariation>())
+        {
+            var s = PlayerTint.Shift(v, ink);
+            Assert.InRange(s.R, 0f, 1f);
+            Assert.InRange(s.G, 0f, 1f);
+            Assert.InRange(s.B, 0f, 1f);
+            Assert.Equal(ink.A, s.A, 4);
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(ShippedInks))]
+    public void TheDegenerateGuardsDoNotTouchShippedColours(string character, string hex)
+    {
+        // The guards clamp value into a band and floor saturation. Every base-game map colour already sits
+        // inside those, so adding mod support must not have moved any of them.
+        var ink = new Color(hex);
+
+        Assert.InRange(ink.V, 0.20f, 0.90f);
+        Assert.True(ink.S >= 0.35f, $"{character}'s ink is less saturated than the hue-shift floor");
+    }
+
     /// <summary>Shortest signed hue distance, in -0.5..0.5.</summary>
     private static float HueDelta(float from, float to)
     {

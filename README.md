@@ -43,6 +43,28 @@ local player comes first, so a colour keyed on display position would come out d
 Keying on `RunState.GetPlayerSlotIndex` — the game's own network-authoritative ordinal — means all four
 players see the same person in the same colour.
 
+## Mod support
+
+Modded characters work with no registration, no list to add to, and no per-character data in this mod.
+Nothing is hard-coded:
+
+- **Who counts as a duplicate** is `player.Character.Id`, so any `CharacterModel` — including BaseLib
+  custom characters — participates automatically.
+- **Art tints** are per-channel multipliers applied to whatever sprite the character supplies, so they work
+  on art this mod has never seen.
+- **Flat colours** are derived from the character's own `MapDrawingColor` / `RemoteTargetingLineColor` by
+  HSV transform, not looked up.
+- **Every patch** targets a game node class, never a character type.
+
+The only per-character colours anywhere in the repo are test fixtures and the thumbnail generator.
+
+Because `MapDrawingColor` and `RemoteTargetingLineColor` are `virtual` with a `Colors.Black` default, a
+modded character that never overrides them would otherwise collapse three of the four variations onto pure
+black. The flat-colour transform guards against that: value is kept inside a band that leaves headroom in
+both directions, and the hue variations floor saturation and value so a hue is actually visible. All five
+shipped characters sit inside those bounds, so no base-game colour is affected — there's a test pinning
+that. An unset black ink comes out as `#464646` / `#202020` / `#403529` / `#402935`.
+
 ## Testing all four variations solo
 
 You need four people sharing a character to see all four colours naturally. The `tint` dev console command

@@ -71,9 +71,21 @@ public static class PlayerTint
     // nothing at all.
     private const float ValueOffset = 0.05f;
 
-    // Rotating the hue of a near-grey colour is invisible, so the hue variations lift saturation to at
-    // least this much first.
-    private const float MinSaturationForHueShift = 0.20f;
+    // Guards for degenerate base colours, which matter entirely for mod support: CharacterModel's
+    // MapDrawingColor / RemoteTargetingLineColor are virtual and both default to Colors.Black, so a modded
+    // character that never overrides them hands us a colour with no hue, no saturation and no value to
+    // work with. Untreated, black ink collapses three of the four variations onto each other — darker,
+    // warmer and cooler all come back pure black. All five shipped characters sit comfortably inside these
+    // bounds, so none of this changes any base-game colour.
+    //
+    // Hue and saturation are meaningless at zero value, so the hue variations lift both into visible range.
+    private const float MinSaturationForHueShift = 0.35f;
+    private const float MinValueForHueShift = 0.25f;
+
+    // The value variations need headroom on both sides, or a black base cannot get darker and a white one
+    // cannot get brighter.
+    private const float MinValueForShift = 0.20f;
+    private const float MaxValueForShift = 0.90f;
 
     // The warmest point on the hue wheel (orange). "Warmer" rotates towards it and "cooler" away, so that
     // the direction is right whatever colour the character's ink starts from - see TowardsWarm.
@@ -188,18 +200,20 @@ public static class PlayerTint
         switch (variation)
         {
             case PlayerVariation.Brighter:
-                v = Mathf.Clamp(v * ValueScaleUp + ValueOffset, 0f, 1f);
+                v = Mathf.Clamp(Headroom(v) * ValueScaleUp + ValueOffset, 0f, 1f);
                 break;
             case PlayerVariation.Darker:
-                v = Mathf.Clamp(v * ValueScaleDown - ValueOffset, 0f, 1f);
+                v = Mathf.Clamp(Headroom(v) * ValueScaleDown - ValueOffset, 0f, 1f);
                 break;
             case PlayerVariation.Warmer:
                 h = WrapHue(h + HueStep * TowardsWarm(h));
                 s = Mathf.Max(s, MinSaturationForHueShift);
+                v = Mathf.Max(v, MinValueForHueShift);
                 break;
             case PlayerVariation.Cooler:
                 h = WrapHue(h - HueStep * TowardsWarm(h));
                 s = Mathf.Max(s, MinSaturationForHueShift);
+                v = Mathf.Max(v, MinValueForHueShift);
                 break;
         }
 
@@ -276,6 +290,12 @@ public static class PlayerTint
     /// Picking the direction by whichever way is shorter to the warm anchor makes the two agree.
     /// </remarks>
     private static float TowardsWarm(float h) => SignedHueDistance(h, WarmAnchor) >= 0f ? 1f : -1f;
+
+    /// <summary>
+    /// Pulls a value into a band that leaves room to move in both directions, so brighter and darker can
+    /// never land on the same colour. A no-op for anything but a near-black or near-white base.
+    /// </summary>
+    private static float Headroom(float v) => Mathf.Clamp(v, MinValueForShift, MaxValueForShift);
 
     /// <summary>Shortest signed path from <paramref name="from" /> to <paramref name="to" />, in -0.5..0.5.</summary>
     private static float SignedHueDistance(float from, float to)
