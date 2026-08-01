@@ -102,7 +102,23 @@ distance apart, measured in OKLab. The dial is `TargetHueSeparation`, in ΔE, no
 
 Muted, dark inks can't reach the target at any sane angle — their chroma is too low for hue rotation to
 move them far. Those hit `MaxHueStep` and take the best available rather than being pushed until they stop
-looking like themselves. Silent is the one shipped example.
+looking like themselves.
+
+### Staying visible on the map
+
+Map ink can also collide with the parchment itself: the Understudy's darker variant landed at `#BD9732`,
+ΔE 7.3 from the overgrowth background, and effectively vanished. `MapBackgrounds` holds the mean colour of
+each act's background, sampled from the shipped textures, and the brightness variations are slid along value
+until they clear `MinMapContrast` of the nearest one.
+
+Two deliberate limits on that guard:
+
+- **Brightness variations only.** A hue variation keeps the character's own brightness exactly. If that sits
+  near the parchment, it's the colour the character chose — not this mod's to override — and moving it would
+  make "warmer" quietly mean "warmer and lighter" too.
+- **Never better than vanilla.** The bar is `MinMapContrast`, or the character's own untinted ink where that
+  is already closer to the background. Regent ships at ΔE 14.6; the job is to avoid making that worse, not
+  to improve on a base-game colour.
 
 ## Building
 

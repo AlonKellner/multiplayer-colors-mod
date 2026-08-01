@@ -63,9 +63,12 @@ public static class PlayerTint
     //
     // The hue rotation is NOT a fixed angle (that was v0.1.5, and it came out badly biased — see
     // SolveHueStep). It is solved per colour so that warmer and cooler end up a constant *perceptual*
-    // distance apart, measured in OKLab. This is the target, in OKLab dE x100: about 16, tuned from
-    // Ironclad reading too strong at 21 and Silent too weak at 5 under the old fixed angle.
-    private const float TargetHueSeparation = 16f;
+    // distance apart, measured in OKLab. This is the target, in OKLab dE x100.
+    //
+    // Anchored on Silent, the character reported closest to right: at 7.7 it read "pretty good but slightly
+    // too much", so 7 is the observed preference. Everything else was at 16 and read anywhere from "slightly
+    // too much" to "way too much", so they come down to meet it.
+    private const float TargetHueSeparation = 7f;
 
     // Bounds on the solved angle. The upper one is an identity guard: past roughly 47 deg a colour stops
     // reading as a shade of the character's own, and for a muted ink no angle reaches the target anyway.
@@ -98,6 +101,17 @@ public static class PlayerTint
     // The warmest point on the hue wheel (orange). "Warmer" rotates towards it and "cooler" away, so that
     // the direction is right whatever colour the character's ink starts from - see TowardsWarm.
     private const float WarmAnchor = 0.08f;
+
+    // Mean colour of each act's map background, sampled from the shipped textures
+    // (images/packed/map/map_bgs/{glory,hive,overgrowth}/). Ink drawn too close to one of these is
+    // effectively invisible, which is what happened to the Understudy's darker variant: at #BD9732 it sat
+    // dE 7.3 from the overgrowth parchment. All three are near OKLab L 0.65, so one guard covers every act.
+    private static readonly Color[] MapBackgrounds = [new("829B97"), new("97925F"), new("A18763")];
+
+    // How far a map ink has to stay from the nearest background, in OKLab dE. Chosen to catch the genuine
+    // collisions without disturbing variants that were already fine: at 14 it moves the Understudy's darker
+    // and two of Regent's, and leaves everything else exactly as the shift produced it.
+    private const float MinMapContrast = 14f;
 
     /// <summary>
     /// The variation for <paramref name="player" />, or <c>null</c> when this player's character is not
@@ -270,6 +284,91 @@ public static class PlayerTint
     {
         var variation = For(player);
         return variation == null ? color : Shift(variation.Value, color);
+    }
+
+    /// <summary>
+    /// As <see cref="Apply(Color, Player)" />, but additionally keeps the result clear of the map's
+    /// parchment so a variation cannot come out invisible against it. For map ink and pings only —
+    /// the combat targeting line is drawn over a dark battlefield and needs no such guard.
+    /// </summary>
+    public static Color ApplyToMapInk(Color color, Player? player)
+    {
+        var variation = For(player);
+        return variation == null ? color : MapInkFor(variation.Value, color);
+    }
+
+    /// <summary>
+    /// The map-ink form of a variation: the flat-colour shift, kept clear of the parchment. Split out from
+    /// <see cref="ApplyToMapInk" /> so it can be exercised without a <see cref="Player" />.
+    /// </summary>
+    public static Color MapInkFor(PlayerVariation variation, Color color) =>
+        EnsureMapContrast(Shift(variation, color), color, variation);
+
+    /// <summary>Distance from the nearest act's map background — how visible a colour is as map ink.</summary>
+    public static float MapBackgroundDistance(Color color)
+    {
+        var nearest = float.MaxValue;
+        foreach (var background in MapBackgrounds)
+        {
+            nearest = MathF.Min(nearest, PerceptualDistance(color, background));
+        }
+
+        return nearest;
+    }
+
+    /// <summary>
+    /// Slides a shifted ink's value until it is far enough from the map background to read, moving the way
+    /// the variation already means where possible (darker goes down, brighter goes up).
+    /// </summary>
+    /// <remarks>
+    /// Only the brightness variations answer for this. A hue variation keeps the character's own brightness
+    /// untouched — if that happens to sit close to the parchment, that is the colour the character chose and
+    /// not this mod's to override, and moving it would make "warmer" quietly mean "warmer and lighter" too.
+    /// Brightness is the axis that owns the problem, so brightness is where it gets solved.
+    ///
+    /// The bar is <see cref="MinMapContrast" />, or the character's own vanilla ink if that is already
+    /// closer to the parchment than the bar — Regent ships at 14.6, and it is not this mod's place to
+    /// "fix" a base-game colour, only to avoid making it worse.
+    ///
+    /// Scans rather than binary-searches because distance to the background is not monotonic in value:
+    /// there are three backgrounds, and a colour can move towards one while moving away from another.
+    /// </remarks>
+    private static Color EnsureMapContrast(Color shifted, Color vanilla, PlayerVariation variation)
+    {
+        if (variation is not (PlayerVariation.Brighter or PlayerVariation.Darker))
+        {
+            return shifted;
+        }
+
+        var required = MathF.Min(MinMapContrast, MapBackgroundDistance(vanilla));
+        if (MapBackgroundDistance(shifted) >= required)
+        {
+            return shifted;
+        }
+
+        var preferred = variation == PlayerVariation.Brighter ? 1 : -1;
+
+        foreach (var direction in new[] { preferred, -preferred })
+        {
+            var v = shifted.V;
+            for (var i = 0; i < 100; i++)
+            {
+                v = Mathf.Clamp(v + direction * 0.01f, 0f, 1f);
+                var candidate = Color.FromHsv(shifted.H, shifted.S, v, shifted.A);
+                if (MapBackgroundDistance(candidate) >= required)
+                {
+                    return candidate;
+                }
+
+                if (v is <= 0f or >= 1f)
+                {
+                    break;
+                }
+            }
+        }
+
+        // No value of this hue clears the background. Better the original than something arbitrary.
+        return shifted;
     }
 
     /// <summary>Component-wise RGB multiply that preserves <paramref name="current" />'s alpha.</summary>

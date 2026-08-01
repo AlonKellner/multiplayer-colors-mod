@@ -26,7 +26,7 @@ public static class MapInkTintPatch
         {
             if (__result != null)
             {
-                __result.DefaultColor = PlayerTint.Apply(__result.DefaultColor, player);
+                __result.DefaultColor = PlayerTint.ApplyToMapInk(__result.DefaultColor, player);
             }
         }
         catch (Exception e)

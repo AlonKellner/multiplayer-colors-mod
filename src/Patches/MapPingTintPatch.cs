@@ -38,7 +38,7 @@ public static class MapPingTintPatch
         {
             if (_created != null && _pendingPlayer != null)
             {
-                _created.Modulate = PlayerTint.Apply(_created.Modulate, _pendingPlayer);
+                _created.Modulate = PlayerTint.ApplyToMapInk(_created.Modulate, _pendingPlayer);
             }
         }
         catch (Exception e)

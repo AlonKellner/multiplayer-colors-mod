@@ -322,7 +322,7 @@ public class ShiftTests
     {
         // The number that matters is the gap between the two, not the gap from vanilla: the job is telling
         // two players' lines apart on the same map.
-        Assert.True(HueSeparation(new Color(hex)) > 7f, $"{character}'s warmer and cooler ink are too close");
+        Assert.True(HueSeparation(new Color(hex)) > 5f, $"{character}'s warmer and cooler ink are too close");
     }
 
     [Fact]
@@ -346,22 +346,19 @@ public class ShiftTests
 
     [Theory]
     [MemberData(nameof(ShippedInks))]
-    public void HueSeparationHitsTheTargetUnlessTheColourCannotReachIt(string character, string hex)
+    public void HueSeparationHitsTheTarget(string character, string hex)
     {
-        // Every character should land on the target, except ones whose ink is too muted for any sane angle
-        // to get there — those are capped deliberately rather than pushed until they stop looking like
-        // themselves. Silent is the one shipped example.
-        var separation = HueSeparation(new Color(hex));
-        var capped = character == "Silent";
+        // At the v0.1.9 target every shipped character can reach it, including Silent — which previously
+        // capped out at 7.7 and is now the character the target is anchored on.
+        Assert.InRange(HueSeparation(new Color(hex)), 6.5f, 7.5f);
+    }
 
-        if (capped)
-        {
-            Assert.InRange(separation, 7f, 16f);
-        }
-        else
-        {
-            Assert.InRange(separation, 15f, 17f);
-        }
+    [Fact]
+    public void InkHueShiftCameDownFromTheVersionReportedTooStrong()
+    {
+        // Every character was reported too strong at dE 16 (v0.1.8). Pinned so a later retune has to make
+        // that call deliberately rather than drift back.
+        Assert.True(HueSeparation(Ink) < 12f, "Ironclad's ink hue shift is back near the level called way too much");
     }
 
     /// <summary>Every shipped character's <c>MapDrawingColor</c>, as of game v0.110.1.</summary>
@@ -478,13 +475,69 @@ public class ShiftTests
         return forward <= 0.5f ? forward : forward - 1f;
     }
 
-    [Fact]
-    public void InkHueShiftIsStrongerThanTheVersionReportedUnnoticeable()
+    /// <summary>Character map inks, including a modded one, for the background-visibility checks.</summary>
+    public static TheoryData<string, string> InksIncludingModded
     {
-        // v0.1.5's fixed 0.035 turn was too small to see on a thin map stroke. Pinned perceptually rather
-        // than as an angle, because the angle is now solved per colour and a *smaller* angle on a vivid
-        // colour can be a bigger visible change than a larger one on a muted colour.
-        Assert.True(HueSeparation(Ink) > 10f, "Ironclad's ink hue shift has regressed below what reads");
+        get
+        {
+            var data = new TheoryData<string, string>();
+            foreach (var row in ShippedInks)
+            {
+                data.Add((string)row[0], (string)row[1]);
+            }
+
+            data.Add("Understudy", "F0C040");
+            return data;
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(InksIncludingModded))]
+    public void BrightnessVariationsStayVisibleAgainstTheMap(string character, string hex)
+    {
+        // The reported bug: the Understudy's darker ink landed at #BD9732, dE 7.3 from the overgrowth
+        // parchment, and effectively vanished. The bar is the guard's own, or the character's vanilla ink
+        // where that is already closer to the background (Regent ships at 14.6).
+        var ink = new Color(hex);
+        var required = Math.Min(14f, PlayerTint.MapBackgroundDistance(ink));
+
+        foreach (var v in new[] { PlayerVariation.Brighter, PlayerVariation.Darker })
+        {
+            var guarded = PlayerTint.MapInkFor(v, ink);
+            Assert.True(
+                PlayerTint.MapBackgroundDistance(guarded) >= required - 0.01f,
+                $"{character}'s {v} map ink (#{guarded.ToHtml(false)}) is only "
+                + $"{PlayerTint.MapBackgroundDistance(guarded):F1} from the map background");
+        }
+    }
+
+    [Fact]
+    public void TheUnderstudysDarkerInkIsNoLongerInvisible()
+    {
+        // Straight regression on the exact report.
+        var before = PlayerTint.Shift(PlayerVariation.Darker, new Color("F0C040"));
+        var after = PlayerTint.MapInkFor(PlayerVariation.Darker, new Color("F0C040"));
+
+        Assert.True(PlayerTint.MapBackgroundDistance(before) < 10f, "the original collision should still reproduce");
+        Assert.True(PlayerTint.MapBackgroundDistance(after) >= 14f, "the guard should have moved it clear");
+    }
+
+    [Theory]
+    [MemberData(nameof(InksIncludingModded))]
+    public void HueVariationsKeepTheCharactersOwnBrightness(string character, string hex)
+    {
+        // The map-visibility guard is deliberately brightness-only. If a character's chosen brightness sits
+        // near the parchment that is their colour, not a bug to correct — and correcting it here would make
+        // "warmer" silently mean "warmer and lighter".
+        var ink = new Color(hex);
+
+        foreach (var v in new[] { PlayerVariation.Warmer, PlayerVariation.Cooler })
+        {
+            Assert.Equal(
+                PlayerTint.Shift(v, ink).V,
+                PlayerTint.MapInkFor(v, ink).V,
+                3);
+        }
     }
 
     [Fact]
