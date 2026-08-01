@@ -1,0 +1,5 @@
+<Project>
+  <!-- Discovers Sts2Path / Sts2DataDir / ModsPath per OS. Override any of them by setting the
+       property on the command line, e.g. dotnet build -p:Sts2Path="D:/Games/Slay the Spire 2". -->
+  <Import Project="$(MSBuildThisFileDirectory)Sts2PathDiscovery.props" />
+</Project>

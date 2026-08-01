@@ -1,0 +1,62 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>MultiplayerColors</AssemblyName>
+    <RootNamespace>MultiplayerColors</RootNamespace>
+    <!-- The game loads this DLL into its own AssemblyLoadContext; it must not drag copies of the
+         game's own assemblies along. Every Reference below is <Private>false</Private>. -->
+    <EnableDynamicLoading>false</EnableDynamicLoading>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!-- The default glob would sweep in tests/ as well, since the test project lives under this one. -->
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="src/**/*.cs" />
+  </ItemGroup>
+
+  <!-- Reference the game's own assemblies. Compiling against the exact DLLs the game will load at
+       runtime removes any chance of a GodotSharp / sts2 version skew. This is deliberately NOT a
+       Godot.NET.Sdk project: the mod ships no scenes and no .pck, so it needs no Godot project, no
+       source generators, and no export step - just GodotSharp for the Color/CanvasItem types. -->
+  <ItemGroup Condition="Exists('$(Sts2DataDir)')">
+    <Reference Include="0Harmony">
+      <HintPath>$(Sts2DataDir)/0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="sts2">
+      <HintPath>$(Sts2DataDir)/sts2.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="GodotSharp">
+      <HintPath>$(Sts2DataDir)/GodotSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Krafs.Publicizer" Version="2.3.0" />
+    <!-- Several art nodes keep their sprite/texture child in a private field (NHandImage._textureRect,
+         NMultiplayerPlayerState._characterIcon, NRemoteTargetingIndicator._line, ...). Publicizing
+         sts2 lets the patches reach them without reflection. -->
+    <Publicize Include="sts2" />
+  </ItemGroup>
+
+  <Target Name="CheckDependencyPaths" BeforeTargets="Build">
+    <Error
+      Condition="!Exists('$(Sts2DataDir)')"
+      Text="Slay the Spire 2 data directory not found at '$(Sts2DataDir)'. Override Sts2Path or Sts2DataDir (see Sts2PathDiscovery.props)." />
+  </Target>
+
+  <!-- Local iteration loop: drop the DLL + manifest straight into the game's mods folder.
+       Disable with -p:CopyToModsFolder=false (e.g. when staging a Workshop upload instead). -->
+  <Target Name="CopyToModsFolderOnBuild" AfterTargets="Build"
+          Condition="'$(CopyToModsFolder)' != 'false' AND Exists('$(ModsPath)')">
+    <MakeDir Directories="$(ModsPath)$(AssemblyName)" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(ModsPath)$(AssemblyName)" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)/$(AssemblyName).json" DestinationFolder="$(ModsPath)$(AssemblyName)" />
+    <Message Importance="high" Text="Deployed $(AssemblyName) to $(ModsPath)$(AssemblyName)" />
+  </Target>
+</Project>
