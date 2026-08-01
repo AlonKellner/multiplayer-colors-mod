@@ -325,6 +325,57 @@ public class ShiftTests
         Assert.True(gap > 0.14f, $"warmer and cooler ink are only {gap * 360f:F0} deg apart");
     }
 
+    /// <summary>Every shipped character's <c>MapDrawingColor</c>, as of game v0.110.1.</summary>
+    public static TheoryData<string, string> ShippedInks => new()
+    {
+        { "Ironclad", "CB282B" },
+        { "Silent", "2F6729" },
+        { "Defect", "0D638C" },
+        { "Necrobinder", "AC0486" },
+        { "Regent", "935206" },
+    };
+
+    [Theory]
+    [MemberData(nameof(ShippedInks))]
+    public void InkWarmsTheSameDirectionAsTheSprite(string character, string hex)
+    {
+        // The v0.1.6 bug: Shift rotated hue by a fixed *signed* step, but which direction is warmer depends
+        // on where you start — adding to red's hue gives orange, adding to green's gives teal. So for every
+        // green- or blue-inked character, "Warmer" ink came out cool, and moved that player's map ink the
+        // opposite way from their own sprite (which uses a channel multiply and is warm from any base).
+        var ink = new Color(hex);
+
+        var inkWarmer = PlayerTint.Shift(PlayerVariation.Warmer, ink);
+        var spriteWarmer = PlayerTint.Combine(ink, PlayerTint.Modulate(PlayerVariation.Warmer));
+
+        Assert.True(
+            Math.Sign(HueDelta(ink.H, inkWarmer.H)) == Math.Sign(HueDelta(ink.H, spriteWarmer.H)),
+            $"{character}: ink warms {HueDelta(ink.H, inkWarmer.H) * 360f:+0;-0} deg but the sprite warms "
+            + $"{HueDelta(ink.H, spriteWarmer.H) * 360f:+0;-0} deg — they disagree about which way is warm");
+    }
+
+    [Fact]
+    public void WarmingAGreenMovesItTowardsYellowNotTeal()
+    {
+        // Spelled out for the case that exposed the bug: Silent's ink is green, and the only way to warm a
+        // green is towards olive/yellow. Landing on teal instead is the failure this pins.
+        var green = new Color("2F6729");
+
+        var warmer = PlayerTint.Shift(PlayerVariation.Warmer, green);
+        var cooler = PlayerTint.Shift(PlayerVariation.Cooler, green);
+
+        Assert.True(HueDelta(green.H, warmer.H) < 0f, "warming a green should move it towards yellow");
+        Assert.True(HueDelta(green.H, cooler.H) > 0f, "cooling a green should move it towards teal");
+    }
+
+    /// <summary>Shortest signed hue distance, in -0.5..0.5.</summary>
+    private static float HueDelta(float from, float to)
+    {
+        var forward = to - from;
+        forward -= (float)Math.Floor(forward);
+        return forward <= 0.5f ? forward : forward - 1f;
+    }
+
     [Fact]
     public void InkHueShiftIsStrongerThanTheValueThatWasReportedUnnoticeable()
     {

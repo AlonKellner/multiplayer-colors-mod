@@ -75,6 +75,10 @@ public static class PlayerTint
     // least this much first.
     private const float MinSaturationForHueShift = 0.20f;
 
+    // The warmest point on the hue wheel (orange). "Warmer" rotates towards it and "cooler" away, so that
+    // the direction is right whatever colour the character's ink starts from - see TowardsWarm.
+    private const float WarmAnchor = 0.08f;
+
     /// <summary>
     /// The variation for <paramref name="player" />, or <c>null</c> when this player's character is not
     /// shared with anybody in the run — in which case nothing should be tinted at all and the character
@@ -190,11 +194,11 @@ public static class PlayerTint
                 v = Mathf.Clamp(v * ValueScaleDown - ValueOffset, 0f, 1f);
                 break;
             case PlayerVariation.Warmer:
-                h = WrapHue(h + HueStep);
+                h = WrapHue(h + HueStep * TowardsWarm(h));
                 s = Mathf.Max(s, MinSaturationForHueShift);
                 break;
             case PlayerVariation.Cooler:
-                h = WrapHue(h - HueStep);
+                h = WrapHue(h - HueStep * TowardsWarm(h));
                 s = Mathf.Max(s, MinSaturationForHueShift);
                 break;
         }
@@ -256,6 +260,28 @@ public static class PlayerTint
     {
         h %= 1f;
         return h < 0f ? h + 1f : h;
+    }
+
+    /// <summary>
+    /// Which way round the hue wheel counts as "warmer" from <paramref name="h" />: <c>+1</c> if increasing
+    /// hue heads towards orange, <c>-1</c> if decreasing does.
+    /// </summary>
+    /// <remarks>
+    /// Rotating hue by a fixed signed step is NOT a warm/cool shift — which direction is warmer depends
+    /// entirely on where you start. Adding to red's hue gives orange (warmer); adding to green's gives teal
+    /// (cooler). Before v0.1.6 the ink always added, so for every green- or blue-inked character the
+    /// variation labelled Warmer came out cool — and, worse, moved that player's map ink the opposite way
+    /// from their own sprite, which uses a channel multiply and so is genuinely warm for any base colour.
+    ///
+    /// Picking the direction by whichever way is shorter to the warm anchor makes the two agree.
+    /// </remarks>
+    private static float TowardsWarm(float h) => SignedHueDistance(h, WarmAnchor) >= 0f ? 1f : -1f;
+
+    /// <summary>Shortest signed path from <paramref name="from" /> to <paramref name="to" />, in -0.5..0.5.</summary>
+    private static float SignedHueDistance(float from, float to)
+    {
+        var forward = WrapHue(to - from);
+        return forward <= 0.5f ? forward : forward - 1f;
     }
 
     // ---- Console override ---------------------------------------------------------------------------
