@@ -37,11 +37,15 @@ public static class PlayerTint
     //
     // These two numbers are the whole strength dial — raise them to make the variations more obvious,
     // lower them to make them subtler. Each variation's opposite is the reciprocal, so the pairs stay
-    // symmetric around neutral however they're tuned. Bumped from 1.12/1.08 in v0.1.2: at the original
-    // values the art tint was too easy to miss side by side (the map ink, which uses the HSV constants
-    // below, already read well and is deliberately left alone).
+    // symmetric around neutral however they're tuned. The map ink, which uses the HSV constants below,
+    // is a separate dial and has read well since v0.1.0 — it is deliberately left alone.
+    //
+    // Tuned against live runs: 1.12/1.08 (v0.1.0) was too weak to notice on both counts; 1.20/1.13
+    // (v0.1.2) settled brightness but left the warm/cool pair still too easy to miss, so the tilt went to
+    // 1.28 in v0.1.4. It runs hotter than the brightness dial on purpose — a chromatic shift reads weaker
+    // than a luminance one at equal magnitude, especially on art that is already strongly coloured.
     private const float BrightnessGain = 1.20f;
-    private const float ChannelTilt = 1.13f;
+    private const float ChannelTilt = 1.28f;
 
     private static readonly Color BrighterMul = Gray(BrightnessGain);
     private static readonly Color DarkerMul = Gray(1f / BrightnessGain);
