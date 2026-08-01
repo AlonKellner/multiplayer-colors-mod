@@ -59,10 +59,18 @@ public static class PlayerTint
     // The value pair below matches the sprite brightness and has read well since v0.1.0. The hue step does
     // NOT match the sprite tilt and should not be expected to: these are drawn as thin strokes on a busy
     // parchment map, where a hue difference that is obvious across a whole character sprite is easy to miss
-    // entirely. Reported unnoticeable at 0.035 (~13 deg) even after the sprite tilt was dialled in, so
-    // v0.1.5 took it to 0.085 (~31 deg) — which puts warmer and cooler ~61 deg apart from each other, the
-    // separation that actually matters when two players are drawing on the same map.
-    private const float HueStep = 0.085f;
+    // entirely.
+    //
+    // The hue rotation is NOT a fixed angle (that was v0.1.5, and it came out badly biased — see
+    // SolveHueStep). It is solved per colour so that warmer and cooler end up a constant *perceptual*
+    // distance apart, measured in OKLab. This is the target, in OKLab dE x100: about 16, tuned from
+    // Ironclad reading too strong at 21 and Silent too weak at 5 under the old fixed angle.
+    private const float TargetHueSeparation = 16f;
+
+    // Bounds on the solved angle. The upper one is an identity guard: past roughly 47 deg a colour stops
+    // reading as a shade of the character's own, and for a muted ink no angle reaches the target anyway.
+    private const float MinHueStep = 0.010f;
+    private const float MaxHueStep = 0.130f;
     private const float ValueScaleUp = 1.12f;
     private const float ValueScaleDown = 0.88f;
 
@@ -206,15 +214,16 @@ public static class PlayerTint
                 v = Mathf.Clamp(Headroom(v) * ValueScaleDown - ValueOffset, 0f, 1f);
                 break;
             case PlayerVariation.Warmer:
-                h = WrapHue(h + HueStep * TowardsWarm(h));
-                s = Mathf.Max(s, MinSaturationForHueShift);
-                v = Mathf.Max(v, MinValueForHueShift);
-                break;
             case PlayerVariation.Cooler:
-                h = WrapHue(h - HueStep * TowardsWarm(h));
+            {
+                // Saturation and value are floored first, because the angle needed depends on them.
                 s = Mathf.Max(s, MinSaturationForHueShift);
                 v = Mathf.Max(v, MinValueForHueShift);
+
+                var step = SolveHueStep(h, s, v) * TowardsWarm(h);
+                h = WrapHue(variation == PlayerVariation.Warmer ? h + step : h - step);
                 break;
+            }
         }
 
         return Color.FromHsv(h, s, v, color.A);
@@ -296,6 +305,89 @@ public static class PlayerTint
     /// never land on the same colour. A no-op for anything but a near-black or near-white base.
     /// </summary>
     private static float Headroom(float v) => Mathf.Clamp(v, MinValueForShift, MaxValueForShift);
+
+    /// <summary>
+    /// The hue angle that puts warmer and cooler <see cref="TargetHueSeparation" /> apart perceptually,
+    /// for a colour at this saturation and value. Bounded by <see cref="MinHueStep" /> and
+    /// <see cref="MaxHueStep" />.
+    /// </summary>
+    /// <remarks>
+    /// A fixed hue angle produces wildly different *felt* differences depending on the colour it is applied
+    /// to, for two compounding reasons:
+    ///
+    /// 1. A hue rotation sweeps an arc whose length scales with how chromatic the colour already is
+    ///    (saturation x value). Ironclad's ink is 2.6x more chromatic than Silent's, so the same angle
+    ///    moved it 2.6x further through colour space.
+    /// 2. HSV hue is not perceptually uniform. The green sector is compressed — a large angular span there
+    ///    all still reads as "green" — while reds and blues fan out much faster.
+    ///
+    /// Together those made a fixed 31 deg step land anywhere from dE 4.6 (Silent) to 31.8 (Defect), a 6.9x
+    /// spread across the five shipped characters, which is exactly the bias that was reported: too weak on
+    /// Silent, too strong on Ironclad. Solving for the perceptual distance instead cancels both causes at
+    /// once, and does it from the colour alone, so a modded character gets the same treatment for free.
+    ///
+    /// A muted, dark ink like Silent's cannot reach the target at any sane angle — its chroma is simply too
+    /// low for hue rotation to move it far. Those hit <see cref="MaxHueStep" /> and get the best available,
+    /// which is still a large improvement, rather than being pushed somewhere that stops looking green.
+    /// </remarks>
+    private static float SolveHueStep(float h, float s, float v)
+    {
+        var direction = TowardsWarm(h);
+        var low = MinHueStep;
+        var high = MaxHueStep;
+
+        // 20 halvings resolves the angle far finer than any display can show. This runs once per line, ping
+        // or targeting indicator, so the cost is irrelevant.
+        for (var i = 0; i < 20; i++)
+        {
+            var mid = 0.5f * (low + high);
+            var warmer = Color.FromHsv(WrapHue(h + mid * direction), s, v);
+            var cooler = Color.FromHsv(WrapHue(h - mid * direction), s, v);
+
+            if (PerceptualDistance(warmer, cooler) < TargetHueSeparation)
+            {
+                low = mid;
+            }
+            else
+            {
+                high = mid;
+            }
+        }
+
+        return 0.5f * (low + high);
+    }
+
+    /// <summary>
+    /// Distance between two colours in OKLab, scaled by 100. Unlike RGB or HSV distance, equal numbers here
+    /// mean roughly equal *perceived* difference, which is the whole point of using it.
+    /// </summary>
+    public static float PerceptualDistance(Color a, Color b)
+    {
+        var (l1, a1, b1) = ToOkLab(a);
+        var (l2, a2, b2) = ToOkLab(b);
+        var dl = l1 - l2;
+        var da = a1 - a2;
+        var db = b1 - b2;
+
+        return MathF.Sqrt(dl * dl + da * da + db * db) * 100f;
+    }
+
+    /// <summary>Godot colours are sRGB, so this linearises before the OKLab matrices.</summary>
+    private static (float L, float A, float B) ToOkLab(Color c)
+    {
+        static float Linear(float x) => x <= 0.04045f ? x / 12.92f : MathF.Pow((x + 0.055f) / 1.055f, 2.4f);
+
+        float r = Linear(c.R), g = Linear(c.G), b = Linear(c.B);
+
+        var l = MathF.Cbrt(0.4122214708f * r + 0.5363325363f * g + 0.0514459929f * b);
+        var m = MathF.Cbrt(0.2119034982f * r + 0.6806995451f * g + 0.1073969566f * b);
+        var s = MathF.Cbrt(0.0883024619f * r + 0.2817188376f * g + 0.6299787005f * b);
+
+        return (
+            0.2104542553f * l + 0.7936177850f * m - 0.0040720468f * s,
+            1.9779984951f * l - 2.4285922050f * m + 0.4505937099f * s,
+            0.0259040371f * l + 0.7827717662f * m - 0.8086757660f * s);
+    }
 
     /// <summary>Shortest signed path from <paramref name="from" /> to <paramref name="to" />, in -0.5..0.5.</summary>
     private static float SignedHueDistance(float from, float to)

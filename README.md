@@ -90,9 +90,19 @@ The strength dial is two constants at the top of [src/PlayerTint.cs](src/PlayerT
 `BrightnessGain` for brighter/darker and `ChannelTilt` for warmer/cooler. Each variation's opposite is built
 as the reciprocal, so the pairs stay symmetric around vanilla however you tune them. Flat colours (map ink,
 pings, targeting lines) have their own constants below those, and they are genuinely independent — don't
-resync them. Art and ink need different amounts of the same shift: `HueStep` runs far hotter than
-`ChannelTilt` because map ink is drawn as thin strokes on a busy parchment map, where a hue difference that
-is obvious across a whole character sprite disappears completely.
+resync them. Art and ink need different amounts of the same shift, because map ink is drawn as thin strokes
+on a busy parchment map.
+
+The ink hue shift is **not** a fixed angle. A fixed angle is badly biased: a hue rotation sweeps an arc
+whose length scales with how chromatic the colour already is, and HSV hue is not perceptually uniform
+(the green sector is compressed, reds and blues fan out fast). Across the five shipped characters a fixed
+31° step landed anywhere from ΔE 4.6 to 31.8 — a 6.9× spread, felt as "too weak on Silent, too strong on
+Ironclad". So `SolveHueStep` searches for whatever angle puts warmer and cooler a constant *perceptual*
+distance apart, measured in OKLab. The dial is `TargetHueSeparation`, in ΔE, not degrees.
+
+Muted, dark inks can't reach the target at any sane angle — their chroma is too low for hue rotation to
+move them far. Those hit `MaxHueStep` and take the best available rather than being pushed until they stop
+looking like themselves. Silent is the one shipped example.
 
 ## Building
 

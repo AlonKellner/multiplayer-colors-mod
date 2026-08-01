@@ -311,18 +311,57 @@ public class ShiftTests
         }
     }
 
-    [Fact]
-    public void WarmerAndCoolerInkAreFarEnoughApartToTellApart()
+    /// <summary>The perceptual gap between a colour's warmer and cooler variants.</summary>
+    private static float HueSeparation(Color ink) => PlayerTint.PerceptualDistance(
+        PlayerTint.Shift(PlayerVariation.Warmer, ink),
+        PlayerTint.Shift(PlayerVariation.Cooler, ink));
+
+    [Theory]
+    [MemberData(nameof(ShippedInks))]
+    public void WarmerAndCoolerInkAreFarEnoughApartToTellApart(string character, string hex)
     {
-        // The number that matters is the gap between the two, not the gap from vanilla: what you're doing
-        // is telling two players' lines apart on the same map. Reported unnoticeable when this was ~25 deg.
-        var warmer = PlayerTint.Shift(PlayerVariation.Warmer, Ink);
-        var cooler = PlayerTint.Shift(PlayerVariation.Cooler, Ink);
+        // The number that matters is the gap between the two, not the gap from vanilla: the job is telling
+        // two players' lines apart on the same map.
+        Assert.True(HueSeparation(new Color(hex)) > 7f, $"{character}'s warmer and cooler ink are too close");
+    }
 
-        var gap = Math.Abs(warmer.H - cooler.H);
-        gap = Math.Min(gap, 1f - gap); // shortest way round the hue wheel
+    [Fact]
+    public void HueSeparationIsConsistentAcrossCharacters()
+    {
+        // The bias this replaced: a fixed hue angle gave dE 4.6 on Silent and 31.8 on Defect — a 6.9x
+        // spread, so the same setting felt too weak on one character and too strong on another. Solving for
+        // perceptual distance instead should keep every character within a narrow band.
+        var separations = ShippedInks
+            .Select(row => (Character: (string)row[0], Separation: HueSeparation(new Color((string)row[1]))))
+            .ToList();
 
-        Assert.True(gap > 0.14f, $"warmer and cooler ink are only {gap * 360f:F0} deg apart");
+        var strongest = separations.MaxBy(x => x.Separation);
+        var weakest = separations.MinBy(x => x.Separation);
+
+        Assert.True(
+            strongest.Separation / weakest.Separation < 2.5f,
+            $"{strongest.Character} ({strongest.Separation:F1}) is {strongest.Separation / weakest.Separation:F1}x "
+            + $"the shift of {weakest.Character} ({weakest.Separation:F1}) — the old fixed-angle bias is back");
+    }
+
+    [Theory]
+    [MemberData(nameof(ShippedInks))]
+    public void HueSeparationHitsTheTargetUnlessTheColourCannotReachIt(string character, string hex)
+    {
+        // Every character should land on the target, except ones whose ink is too muted for any sane angle
+        // to get there — those are capped deliberately rather than pushed until they stop looking like
+        // themselves. Silent is the one shipped example.
+        var separation = HueSeparation(new Color(hex));
+        var capped = character == "Silent";
+
+        if (capped)
+        {
+            Assert.InRange(separation, 7f, 16f);
+        }
+        else
+        {
+            Assert.InRange(separation, 15f, 17f);
+        }
     }
 
     /// <summary>Every shipped character's <c>MapDrawingColor</c>, as of game v0.110.1.</summary>
@@ -440,15 +479,34 @@ public class ShiftTests
     }
 
     [Fact]
-    public void InkHueShiftIsStrongerThanTheValueThatWasReportedUnnoticeable()
+    public void InkHueShiftIsStrongerThanTheVersionReportedUnnoticeable()
     {
-        // Pins the v0.1.5 retune: 0.035 was too small to see on a thin map stroke, even once the sprite
-        // tilt was judged perfect. The two dials are deliberately independent — do not resync them.
-        var warmer = PlayerTint.Shift(PlayerVariation.Warmer, Ink);
+        // v0.1.5's fixed 0.035 turn was too small to see on a thin map stroke. Pinned perceptually rather
+        // than as an angle, because the angle is now solved per colour and a *smaller* angle on a vivid
+        // colour can be a bigger visible change than a larger one on a muted colour.
+        Assert.True(HueSeparation(Ink) > 10f, "Ironclad's ink hue shift has regressed below what reads");
+    }
 
-        var step = Math.Abs(warmer.H - Ink.H);
-        step = Math.Min(step, 1f - step);
+    [Fact]
+    public void PerceptualDistanceIsZeroForIdenticalColoursAndGrowsWithDifference()
+    {
+        var red = new Color("CB282B");
 
-        Assert.True(step > 0.035f, $"ink hue step is only {step * 360f:F0} deg");
+        Assert.Equal(0f, PlayerTint.PerceptualDistance(red, red), 3);
+        Assert.True(
+            PlayerTint.PerceptualDistance(red, new Color("CB4A2B"))
+            < PlayerTint.PerceptualDistance(red, new Color("2BCB28")),
+            "a small shift should measure closer than a large one");
+    }
+
+    [Fact]
+    public void PerceptualDistanceRatesEqualRgbStepsByHowTheyLook()
+    {
+        // The reason OKLab is worth the ~25 lines: identical RGB deltas on dark vs bright colours are not
+        // equally visible, and it is exactly that mismatch which biased the old fixed-angle shift.
+        var onDark = PlayerTint.PerceptualDistance(new Color("101010"), new Color("303030"));
+        var onBright = PlayerTint.PerceptualDistance(new Color("DFDFDF"), new Color("FFFFFF"));
+
+        Assert.True(onDark > onBright, "a step in dark tones should read as a bigger change than the same step in bright ones");
     }
 }
