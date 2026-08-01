@@ -1,0 +1,8 @@
+# Per-upload build outputs (re-assembled from the build artifacts before each upload)
+MultiplayerColors/content/MultiplayerColors.dll
+MultiplayerColors/content/MultiplayerColors.json
+
+# Uploader logs
+mod-uploader.log
+
+# Keep tracked: workshop.json, image.png, and mod_id.txt (needed to update the same item)
