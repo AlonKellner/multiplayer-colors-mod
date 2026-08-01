@@ -41,10 +41,32 @@ local player comes first, so a colour keyed on display position would come out d
 Keying on `RunState.GetPlayerSlotIndex` — the game's own network-authoritative ordinal — means all four
 players see the same person in the same colour.
 
+## Testing all four variations solo
+
+You need four people sharing a character to see all four colours naturally. The `tint` dev console command
+forces one on yourself instead:
+
+```
+tint                # report the current setting
+tint brighter       # force a variation on yourself
+tint darker
+tint warmer
+tint cooler
+tint off            # no tint at all
+tint auto           # back to normal (only players sharing a character get tinted)
+```
+
+It recolours what's already on screen, so you don't have to change rooms to see the effect. It applies to
+**you only** — teammates stay on the normal rule, so you can hold a forced colour next to a real one — and
+it's local, so it never changes what anybody else sees.
+
 ## Tuning
 
-All the constants live at the top of [src/PlayerTint.cs](src/PlayerTint.cs). If a variation reads too
-strongly or too weakly in game, change them there; nothing else needs to move.
+The strength dial is two constants at the top of [src/PlayerTint.cs](src/PlayerTint.cs):
+`BrightnessGain` for brighter/darker and `ChannelTilt` for warmer/cooler. Each variation's opposite is built
+as the reciprocal, so the pairs stay symmetric around vanilla however you tune them. Flat colours (map ink,
+pings, targeting lines) have their own constants below those — they're a separate dial because a multiply
+reads differently on a solid colour than on art.
 
 ## Building
 
@@ -70,6 +92,9 @@ This is a DLL-only mod — no `.pck`, no Godot project, no export step, and no B
 
 - **`PlayerTintTests`** — the roster logic and the colour maths, including that assignment follows slot
   index rather than list order.
+- **`TintConsoleCmdTests`** — the `tint` command's parsing, and that `TintOverride` stays aligned with
+  `PlayerVariation` (they're bridged by an enum cast that would silently pick the wrong colour if they
+  drifted apart).
 - **`PatchTargetTests`** — resolves every `[HarmonyPatch]` target the same way Harmony does, and checks each
   patch parameter against the target's real signature. A game update that renames one of the patched methods
   fails here instead of shipping a mod that quietly does nothing.

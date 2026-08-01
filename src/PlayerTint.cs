@@ -1,4 +1,6 @@
+using System.Runtime.CompilerServices;
 using Godot;
+using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.Players;
 
 namespace MultiplayerColors;
@@ -30,12 +32,23 @@ public enum PlayerVariation
 /// </summary>
 public static class PlayerTint
 {
-    // Sprite tints, applied by multiplying into CanvasItem.Modulate. Godot allows components above 1,
-    // which is what makes "brighter" possible without a shader.
-    private static readonly Color BrighterMul = new(1.12f, 1.12f, 1.12f);
-    private static readonly Color DarkerMul = new(0.88f, 0.88f, 0.88f);
-    private static readonly Color WarmerMul = new(1.08f, 1.00f, 0.90f);
-    private static readonly Color CoolerMul = new(0.90f, 1.00f, 1.10f);
+    // Sprite tints, folded into CanvasItem.Modulate. Godot allows components above 1, which is what makes
+    // "brighter" possible without a shader.
+    //
+    // These two numbers are the whole strength dial — raise them to make the variations more obvious,
+    // lower them to make them subtler. Each variation's opposite is the reciprocal, so the pairs stay
+    // symmetric around neutral however they're tuned. Bumped from 1.12/1.08 in v0.1.2: at the original
+    // values the art tint was too easy to miss side by side (the map ink, which uses the HSV constants
+    // below, already read well and is deliberately left alone).
+    private const float BrightnessGain = 1.20f;
+    private const float ChannelTilt = 1.13f;
+
+    private static readonly Color BrighterMul = Gray(BrightnessGain);
+    private static readonly Color DarkerMul = Gray(1f / BrightnessGain);
+    private static readonly Color WarmerMul = new(ChannelTilt, 1f, 1f / ChannelTilt);
+    private static readonly Color CoolerMul = new(1f / ChannelTilt, 1f, ChannelTilt);
+
+    private static Color Gray(float v) => new(v, v, v);
 
     // Flat-colour equivalents, tuned to read as the same shift as the multipliers above.
     // The hue step sits just under the 0.05 jitter the base game already applies to duplicate monsters
@@ -72,6 +85,14 @@ public static class PlayerTint
         if (player == null || run == null)
         {
             return null;
+        }
+
+        // The `tint` console command forces a variation on the local player so all four can be eyeballed
+        // without four people in a lobby. Teammates stay on the normal rule, so a forced colour can be
+        // compared against a real one. Local-only also means it never desyncs anybody else's view.
+        if (Override != TintOverride.Auto && LocalContext.IsMe(player))
+        {
+            return Override == TintOverride.Off ? null : (PlayerVariation)(Override - TintOverride.Brighter);
         }
 
         return Resolve(run.Players, player, p => p?.Character?.Id, p => run.GetPlayerSlotIndex(p));
@@ -173,29 +194,39 @@ public static class PlayerTint
     }
 
     /// <summary>
-    /// Multiplies this player's variation into <paramref name="node" />'s modulate, leaving alpha alone.
-    /// No-op when the player's character is unique in the run.
+    /// Folds this player's variation into <paramref name="node" />'s modulate, leaving alpha alone.
+    /// No-op when the player's character is unique in the run and no override is set.
     /// </summary>
     /// <remarks>
-    /// Multiplies rather than assigns so it composes with the tints the base game applies itself — the
-    /// 0.5 grey NCombatRoom / NMerchantRoom put on back-row players, the DarkGray NRestSiteRoom puts on
-    /// the campfire containers when the fire is out, and the half-transparency NHandImage puts on remote
-    /// players' arms.
+    /// The node's modulate at the moment of the first call is remembered as its base, and the tint is
+    /// applied on top of that. This composes with the tints the base game applies itself — the 0.5 grey
+    /// NCombatRoom / NMerchantRoom put on back-row players, the DarkGray NRestSiteRoom puts on the campfire
+    /// containers when the fire is out, and the half-transparency NHandImage puts on remote players' arms —
+    /// and, unlike a plain multiply, it stays re-computable, which is what lets <see cref="Refresh" />
+    /// recolour live nodes when the console override changes.
+    ///
+    /// Caveat: if the game reassigns the modulate of a node we already tinted, the remembered base goes
+    /// stale. None of the nodes this mod tints are written by the game after the fact — that is exactly why
+    /// each patch targets the innermost art node rather than the container.
     /// </remarks>
     public static void Apply(CanvasItem? node, Player? player)
     {
-        if (node == null)
+        if (node == null || player == null)
         {
             return;
         }
 
-        var variation = For(player);
-        if (variation == null)
+        if (Tinted.TryGetValue(node, out var entry))
         {
-            return;
+            entry.Player = player;
+        }
+        else
+        {
+            entry = new TintedNode(node.Modulate, player);
+            Tinted.Add(node, entry);
         }
 
-        node.Modulate = Combine(node.Modulate, Modulate(variation.Value));
+        Repaint(node, entry);
     }
 
     /// <summary>Shifts a flat colour for this player, or returns it untouched when there is no variation.</summary>
@@ -217,4 +248,75 @@ public static class PlayerTint
         h %= 1f;
         return h < 0f ? h + 1f : h;
     }
+
+    // ---- Console override ---------------------------------------------------------------------------
+    // Backing state for the `tint` dev command. Everything below is a local testing aid: it changes only
+    // what this client draws, never what is sent to anyone else.
+
+    /// <summary>What the <c>tint</c> console command has forced, if anything.</summary>
+    public static TintOverride Override { get; set; } = TintOverride.Auto;
+
+    /// <summary>
+    /// Nodes this mod has tinted, with the modulate they had before we touched them. Weak keys, so a node
+    /// freed by Godot drops out on its own and nothing here keeps a room alive.
+    /// </summary>
+    private static readonly ConditionalWeakTable<CanvasItem, TintedNode> Tinted = new();
+
+    private sealed class TintedNode(Color baseModulate, Player player)
+    {
+        public Color BaseModulate { get; } = baseModulate;
+        public Player Player { get; set; } = player;
+    }
+
+    private static void Repaint(CanvasItem node, TintedNode entry)
+    {
+        var variation = For(entry.Player);
+        node.Modulate = variation == null
+            ? entry.BaseModulate
+            : Combine(entry.BaseModulate, Modulate(variation.Value));
+    }
+
+    /// <summary>
+    /// Recolours every sprite tinted so far, so a <c>tint</c> command takes effect on what is already on
+    /// screen instead of only on the next room. Returns how many nodes were repainted.
+    /// </summary>
+    /// <remarks>
+    /// Sprites only. Flat colours (map ink, pings, targeting lines) are one-shot assignments with nothing
+    /// to walk — but they are all recreated per stroke / per ping / per turn, so they pick the override up
+    /// on their own the next time they're drawn.
+    /// </remarks>
+    public static int Refresh()
+    {
+        var repainted = 0;
+        foreach (var (node, entry) in Tinted)
+        {
+            if (!GodotObject.IsInstanceValid(node))
+            {
+                continue;
+            }
+
+            Repaint(node, entry);
+            repainted++;
+        }
+
+        return repainted;
+    }
+}
+
+/// <summary>
+/// What the <c>tint</c> console command has forced. <see cref="Auto" /> is the shipping behaviour (tint only
+/// players who share a character); the rest are local testing overrides for the current player.
+/// </summary>
+/// <remarks>
+/// The four variation members are ordered to match <see cref="PlayerVariation" /> so one can be cast to the
+/// other by subtracting <see cref="Brighter" />.
+/// </remarks>
+public enum TintOverride
+{
+    Auto,
+    Off,
+    Brighter,
+    Darker,
+    Warmer,
+    Cooler,
 }

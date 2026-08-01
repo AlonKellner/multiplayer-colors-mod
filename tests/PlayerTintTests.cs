@@ -156,15 +156,43 @@ public class ModulateTests
     [Fact]
     public void ModulatesAreSubtle()
     {
-        // Every channel stays within 15% of neutral: visible side by side, still the same character.
+        // Every channel stays within 25% of neutral: clearly visible side by side, still the same
+        // character rather than a recolour. The upper bound tracks BrightnessGain in PlayerTint —
+        // if you raise the strength dial past this, decide deliberately that it's still "subtle".
         foreach (PlayerVariation v in Enum.GetValues<PlayerVariation>())
         {
             var m = PlayerTint.Modulate(v);
             foreach (var channel in new[] { m.R, m.G, m.B })
             {
-                Assert.InRange(channel, 0.85f, 1.15f);
+                Assert.InRange(channel, 0.75f, 1.25f);
             }
         }
+    }
+
+    [Fact]
+    public void OppositeVariationsAreSymmetricAroundNeutral()
+    {
+        // Brighter/Darker and Warmer/Cooler are built as reciprocals of one strength constant, so they
+        // stay balanced however the dial is tuned — no variation drifts further from vanilla than its pair.
+        var brighter = PlayerTint.Modulate(PlayerVariation.Brighter);
+        var darker = PlayerTint.Modulate(PlayerVariation.Darker);
+        var warmer = PlayerTint.Modulate(PlayerVariation.Warmer);
+        var cooler = PlayerTint.Modulate(PlayerVariation.Cooler);
+
+        Assert.Equal(1f, brighter.R * darker.R, 3);
+        Assert.Equal(1f, warmer.R * cooler.R, 3);
+        Assert.Equal(1f, warmer.B * cooler.B, 3);
+    }
+
+    [Fact]
+    public void ArtTintIsStrongerThanTheOriginalV0_1_1Values()
+    {
+        // Guards the v0.1.2 retune: the first release's art tint was too easy to miss in a live game
+        // (reported after a real 2-player run), while the map ink was already right.
+        Assert.True(PlayerTint.Modulate(PlayerVariation.Brighter).R > 1.12f);
+        Assert.True(PlayerTint.Modulate(PlayerVariation.Darker).R < 0.88f);
+        Assert.True(PlayerTint.Modulate(PlayerVariation.Warmer).R > 1.08f);
+        Assert.True(PlayerTint.Modulate(PlayerVariation.Cooler).B > 1.10f);
     }
 
     [Fact]
