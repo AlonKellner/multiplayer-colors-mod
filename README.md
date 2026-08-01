@@ -126,12 +126,16 @@ Requires .NET 9 and a local Slay the Spire 2 install (the project compiles again
 `sts2.dll`, `0Harmony.dll` and `GodotSharp.dll`, so there's no version skew).
 
 ```bash
-dotnet build MultiplayerColors.csproj      # also deploys into the game's mods/ folder
+dotnet build MultiplayerColors.csproj
 dotnet test tests/MultiplayerColors.Tests.csproj
 ```
 
-`dotnet build` copies `MultiplayerColors.dll` + `MultiplayerColors.json` into the game's `mods/` folder for
-the local iteration loop. Pass `-p:CopyToModsFolder=false` to skip that.
+**This mod is distributed through the Steam Workshop only — `build` deliberately does not deploy into the
+game's local `mods/` folder.** A local copy silently *shadows* the Workshop one (the game logs "loaded both
+via Steam and local mods directory. Disabling the Steam workshop version"), so you would publish an update
+and go on testing a build nobody else has. To get a change in game, publish it:
+`scripts/publish-workshop.sh "note"`. Both the build and the publish script hard-fail if a stale local copy
+is found.
 
 The game path is discovered per-OS in [Sts2PathDiscovery.props](Sts2PathDiscovery.props); override with
 `-p:Sts2Path=...` if your install lives somewhere unusual.

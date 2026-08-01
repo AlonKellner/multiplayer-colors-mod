@@ -32,6 +32,11 @@ pgrep -x steam_osx >/dev/null || die "Steam is not running/logged in — start S
 [ -x "$UPLOADER/ModUploader" ] || die "ModUploader missing at $UPLOADER/ModUploader (see workshop/README.md, or set MOD_UPLOADER)."
 xattr -dr com.apple.quarantine "$UPLOADER" 2>/dev/null || true
 
+# This mod is Workshop-only. A copy in the game's local mods/ folder silently shadows the Workshop one
+# ("Disabling the Steam workshop version" in the game log), so you'd publish here and keep testing that.
+LOCAL_MOD="$HOME/Library/Application Support/Steam/steamapps/common/Slay the Spire 2/SlayTheSpire2.app/Contents/MacOS/mods/MultiplayerColors"
+[ -e "$LOCAL_MOD" ] && die "a local copy exists at $LOCAL_MOD and would shadow the Workshop version — remove it first."
+
 # Optional changeNote update (first arg) -------------------------------------
 if [ "${1:-}" != "" ]; then
   step "Updating workshop changeNote"
@@ -46,9 +51,8 @@ if [ "${SKIP_TESTS:-0}" != "1" ]; then
 fi
 
 # 2. Build the shipping DLL --------------------------------------------------
-# CopyToModsFolder=false so a publish run doesn't also stomp the local dev install.
 step "Building shipping DLL"
-"$DOTNET" build "$ROOT/MultiplayerColors.csproj" --nologo -clp:ErrorsOnly -p:CopyToModsFolder=false \
+"$DOTNET" build "$ROOT/MultiplayerColors.csproj" --nologo -clp:ErrorsOnly \
   || die "DLL build failed."
 [ -f "$DLL" ] || die "no DLL produced at $DLL"
 [ "$DLL" -nt "$ROOT/src/PlayerTint.cs" ] || die "DLL is older than src/ — the build did not run."

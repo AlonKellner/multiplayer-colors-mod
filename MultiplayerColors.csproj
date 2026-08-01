@@ -50,13 +50,15 @@
       Text="Slay the Spire 2 data directory not found at '$(Sts2DataDir)'. Override Sts2Path or Sts2DataDir (see Sts2PathDiscovery.props)." />
   </Target>
 
-  <!-- Local iteration loop: drop the DLL + manifest straight into the game's mods folder.
-       Disable with -p:CopyToModsFolder=false (e.g. when staging a Workshop upload instead). -->
-  <Target Name="CopyToModsFolderOnBuild" AfterTargets="Build"
-          Condition="'$(CopyToModsFolder)' != 'false' AND Exists('$(ModsPath)')">
-    <MakeDir Directories="$(ModsPath)$(AssemblyName)" />
-    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(ModsPath)$(AssemblyName)" />
-    <Copy SourceFiles="$(MSBuildProjectDirectory)/$(AssemblyName).json" DestinationFolder="$(ModsPath)$(AssemblyName)" />
-    <Message Importance="high" Text="Deployed $(AssemblyName) to $(ModsPath)$(AssemblyName)" />
+  <!-- NOTE: this project deliberately does NOT deploy into the game's local mods/ folder. This mod is
+       distributed via the Steam Workshop only, and a local copy silently SHADOWS the Workshop one — the
+       game logs "loaded both via Steam and local mods directory. Disabling the Steam workshop version",
+       so you end up testing a build nobody else has. `build` leaves the DLL in $(OutputPath); to get it
+       in game, publish it: scripts/publish-workshop.sh. The former CopyToModsFolderOnBuild target was
+       removed for this reason, matching the sibling the-apprentice-mod repo. -->
+
+  <!-- Belt and braces: fail the build if a stale local copy is sitting there shadowing the Workshop one. -->
+  <Target Name="WarnOnLocalModCopy" BeforeTargets="Build" Condition="Exists('$(ModsPath)$(AssemblyName)')">
+    <Error Text="A local copy of $(AssemblyName) exists at $(ModsPath)$(AssemblyName) and will shadow the Steam Workshop version. This mod is Workshop-only — remove that folder before building." />
   </Target>
 </Project>
