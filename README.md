@@ -67,8 +67,10 @@ it's local, so it never changes what anybody else sees.
 The strength dial is two constants at the top of [src/PlayerTint.cs](src/PlayerTint.cs):
 `BrightnessGain` for brighter/darker and `ChannelTilt` for warmer/cooler. Each variation's opposite is built
 as the reciprocal, so the pairs stay symmetric around vanilla however you tune them. Flat colours (map ink,
-pings, targeting lines) have their own constants below those — they're a separate dial because a multiply
-reads differently on a solid colour than on art.
+pings, targeting lines) have their own constants below those, and they are genuinely independent — don't
+resync them. Art and ink need different amounts of the same shift: `HueStep` runs far hotter than
+`ChannelTilt` because map ink is drawn as thin strokes on a busy parchment map, where a hue difference that
+is obvious across a whole character sprite disappears completely.
 
 ## Building
 

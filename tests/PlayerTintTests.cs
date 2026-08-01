@@ -298,15 +298,43 @@ public class ShiftTests
     }
 
     [Fact]
-    public void ShiftIsSubtle()
+    public void ShiftStaysShortOfADifferentColour()
     {
-        // Still recognisably the same ink: no channel moves by more than a quarter.
+        // A ceiling, not a target. Map ink is drawn as thin strokes and needs a bigger shift than sprite
+        // art to register at all, but it still has to look like a shade of that character's colour.
         foreach (PlayerVariation v in Enum.GetValues<PlayerVariation>())
         {
             var s = PlayerTint.Shift(v, Ink);
-            Assert.True(Math.Abs(s.R - Ink.R) < 0.25f);
-            Assert.True(Math.Abs(s.G - Ink.G) < 0.25f);
-            Assert.True(Math.Abs(s.B - Ink.B) < 0.25f);
+            Assert.True(Math.Abs(s.R - Ink.R) < 0.40f, $"{v} moved red too far");
+            Assert.True(Math.Abs(s.G - Ink.G) < 0.40f, $"{v} moved green too far");
+            Assert.True(Math.Abs(s.B - Ink.B) < 0.40f, $"{v} moved blue too far");
         }
+    }
+
+    [Fact]
+    public void WarmerAndCoolerInkAreFarEnoughApartToTellApart()
+    {
+        // The number that matters is the gap between the two, not the gap from vanilla: what you're doing
+        // is telling two players' lines apart on the same map. Reported unnoticeable when this was ~25 deg.
+        var warmer = PlayerTint.Shift(PlayerVariation.Warmer, Ink);
+        var cooler = PlayerTint.Shift(PlayerVariation.Cooler, Ink);
+
+        var gap = Math.Abs(warmer.H - cooler.H);
+        gap = Math.Min(gap, 1f - gap); // shortest way round the hue wheel
+
+        Assert.True(gap > 0.14f, $"warmer and cooler ink are only {gap * 360f:F0} deg apart");
+    }
+
+    [Fact]
+    public void InkHueShiftIsStrongerThanTheValueThatWasReportedUnnoticeable()
+    {
+        // Pins the v0.1.5 retune: 0.035 was too small to see on a thin map stroke, even once the sprite
+        // tilt was judged perfect. The two dials are deliberately independent — do not resync them.
+        var warmer = PlayerTint.Shift(PlayerVariation.Warmer, Ink);
+
+        var step = Math.Abs(warmer.H - Ink.H);
+        step = Math.Min(step, 1f - step);
+
+        Assert.True(step > 0.035f, $"ink hue step is only {step * 360f:F0} deg");
     }
 }

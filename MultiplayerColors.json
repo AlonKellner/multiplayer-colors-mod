@@ -3,7 +3,7 @@
   "name": "Multiplayer Colors",
   "author": "Alon Kellner",
   "description": "Gives each player a slight, distinct color variation when two or more players in a co-op run pick the same character.",
-  "version": "v0.1.4",
+  "version": "v0.1.5",
   "min_game_version": "0.110.0",
   "has_pck": false,
   "has_dll": true,

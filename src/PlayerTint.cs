@@ -54,10 +54,15 @@ public static class PlayerTint
 
     private static Color Gray(float v) => new(v, v, v);
 
-    // Flat-colour equivalents, tuned to read as the same shift as the multipliers above.
-    // The hue step sits just under the 0.05 jitter the base game already applies to duplicate monsters
-    // in NCombatRoom.RandomizeEnemyScalesAndHues, so it is known not to look strange.
-    private const float HueStep = 0.035f;
+    // Flat-colour equivalents, for map ink, pings and targeting lines.
+    //
+    // The value pair below matches the sprite brightness and has read well since v0.1.0. The hue step does
+    // NOT match the sprite tilt and should not be expected to: these are drawn as thin strokes on a busy
+    // parchment map, where a hue difference that is obvious across a whole character sprite is easy to miss
+    // entirely. Reported unnoticeable at 0.035 (~13 deg) even after the sprite tilt was dialled in, so
+    // v0.1.5 took it to 0.085 (~31 deg) — which puts warmer and cooler ~61 deg apart from each other, the
+    // separation that actually matters when two players are drawing on the same map.
+    private const float HueStep = 0.085f;
     private const float ValueScaleUp = 1.12f;
     private const float ValueScaleDown = 0.88f;
 
