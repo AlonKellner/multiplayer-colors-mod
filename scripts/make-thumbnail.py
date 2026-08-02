@@ -31,6 +31,19 @@ PCK = os.path.expanduser(
 
 CHARACTERS = ["ironclad", "silent", "defect", "necrobinder", "regent"]
 
+# Rendered at 2x the delivered size and downsampled: the text and emoji come out visibly crisper for it,
+# and PNG is lossless so nothing is given up in the encode.
+#
+# OUTPUT_PX is bounded by the source art, not by Steam. The character face icons ship at 88x88 and there is
+# no larger version in the game (char_select is different art at a different aspect), so at the layout's
+# 8.5vw an icon is drawn at 0.085 * OUTPUT_PX. 1035px would be exactly native; 1200 upscales them ~1.16x,
+# which is imperceptible on art this stylised. Much beyond that and they start to soften.
+RENDER_PX = 2400
+OUTPUT_PX = 1200
+
+# Steam rejects preview images over 1 MB.
+MAX_BYTES = 1024 * 1024
+
 # Columns, in the order they appear. (key, emoji, PlayerVariation name)
 COLUMNS = [
     ("cool", "\N{SNOWFLAKE}\N{VARIATION SELECTOR-16}", "Cooler"),
@@ -173,20 +186,23 @@ def main():
         with open(page, "w") as f:
             f.write(build_html(icons))
 
-        subprocess.run(["qlmanage", "-t", "-s", "1200", "-o", work, page],
+        subprocess.run(["qlmanage", "-t", "-s", str(RENDER_PX), "-o", work, page],
                        capture_output=True, check=False)
 
         rendered = os.path.join(work, "thumb.html.png")
         if not os.path.exists(rendered):
             sys.exit("qlmanage did not produce a PNG")
 
-        # Render at 2x for crispness, then halve to the layout's real size.
-        subprocess.run(["sips", "-Z", "600", rendered], capture_output=True, check=False)
+        subprocess.run(["sips", "-Z", str(OUTPUT_PX), rendered], capture_output=True, check=False)
         shutil.copy(rendered, OUT)
+
+        written = os.path.getsize(OUT)
         size = subprocess.run(["sips", "-g", "pixelWidth", "-g", "pixelHeight", OUT],
                               capture_output=True, text=True).stdout
-        print(f"wrote {OUT} ({os.path.getsize(OUT)} bytes)")
-        print("  " + " ".join(size.split()[-4:]))
+        print(f"wrote {OUT}")
+        print(f"  {' '.join(size.split()[-4:])}  {written / 1024:.0f} KB")
+        if written > MAX_BYTES:
+            sys.exit(f"image is {written / 1024:.0f} KB, over Steam's 1 MB preview limit — lower OUTPUT_PX")
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
