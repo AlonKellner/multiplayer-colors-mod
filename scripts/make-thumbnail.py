@@ -139,10 +139,12 @@ p{{margin:1vw 0 2.2vw;font-size:2.2vw;color:#a79cb0}}
 table{{border-collapse:separate;border-spacing:1vw}}
 th,td{{width:15vw;height:11vw;text-align:center;vertical-align:middle}}
 th.ch{{width:12.5vw;background:#241f2b;border-radius:1.5vw}}
-/* No inset ring on the cells and no drop-shadow under the icons: both would darken background pixels,
-   and every cell fill has to be *exactly* the map colour the mod really draws with. */
-td{{border-radius:1.5vw}}
-img{{width:8.5vw;height:8.5vw;vertical-align:middle}}
+/* The inset edge and the icon's drop-shadow both darken a few background pixels, which is a deliberate
+   trade: they make the icons far easier to read against a same-hue cell. The flat interior of every cell
+   is still exactly the map colour the mod draws with. */
+td{{border-radius:1.5vw;box-shadow:inset 0 0 0 .17vw rgba(0,0,0,.3)}}
+img{{width:8.5vw;height:8.5vw;vertical-align:middle;
+  filter:drop-shadow(0 .17vw .34vw rgba(0,0,0,.55))}}
 th.ch img{{width:7.5vw;height:7.5vw}}
 .e{{font-size:3.8vw;line-height:1.1}}
 .l{{font-size:1.6vw;color:#a79cb0;letter-spacing:.25vw;text-transform:uppercase}}
