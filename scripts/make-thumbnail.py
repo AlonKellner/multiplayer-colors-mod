@@ -47,6 +47,15 @@ MULTIPLIERS = {
     "Cooler": (0.7812, 1.0000, 1.2800),
 }
 
+# CharacterModel.MapDrawingColor - the untinted ink, used to outline each row's title icon.
+BASE_INKS = {
+    "ironclad": "cb282b",
+    "silent": "2f6729",
+    "defect": "0d638c",
+    "necrobinder": "ac0486",
+    "regent": "935206",
+}
+
 # PlayerTint.MapInkFor - each character's real map-ink colour per variation.
 INKS = {
     "ironclad": {"Brighter": "f02f33", "Darker": "a62123", "Warmer": "cb4628", "Cooler": "cb284c"},
@@ -113,7 +122,10 @@ def build_html(icons):
             f'<img src="{icons[c]}" style="filter:url(#f_{key})">'
             f'</td>'
             for key, _, var in COLUMNS)
-        rows += f'<tr><th class="ch"><img src="{icons[c]}"></th>{cells}</tr>'
+        # Row title carries the character's untinted map colour as an outline, so each row reads as
+        # "base colour, then the four it shifts to".
+        rows += (f'<tr><th class="ch" style="box-shadow:inset 0 0 0 .6vw #{BASE_INKS[c]}">'
+                 f'<img src="{icons[c]}"></th>{cells}</tr>')
 
     # Everything is sized in vw rather than px: qlmanage rasterises at a viewport of its own choosing and
     # then scales the result to a square, so a fixed-pixel layout ends up small in one corner. Viewport
@@ -127,9 +139,10 @@ p{{margin:1vw 0 2.2vw;font-size:2.2vw;color:#a79cb0}}
 table{{border-collapse:separate;border-spacing:1vw}}
 th,td{{width:15vw;height:11vw;text-align:center;vertical-align:middle}}
 th.ch{{width:12.5vw;background:#241f2b;border-radius:1.5vw}}
-td{{border-radius:1.5vw;box-shadow:inset 0 0 0 .17vw rgba(0,0,0,.3)}}
-img{{width:8.5vw;height:8.5vw;vertical-align:middle;
-  filter:drop-shadow(0 .17vw .34vw rgba(0,0,0,.55))}}
+/* No inset ring on the cells and no drop-shadow under the icons: both would darken background pixels,
+   and every cell fill has to be *exactly* the map colour the mod really draws with. */
+td{{border-radius:1.5vw}}
+img{{width:8.5vw;height:8.5vw;vertical-align:middle}}
 th.ch img{{width:7.5vw;height:7.5vw}}
 .e{{font-size:3.8vw;line-height:1.1}}
 .l{{font-size:1.6vw;color:#a79cb0;letter-spacing:.25vw;text-transform:uppercase}}
