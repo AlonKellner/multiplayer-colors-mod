@@ -2,7 +2,7 @@
   "title": "Multiplayer Colors WIP",
   "description": "In co-op, two players can pick the same character and then look identical everywhere. This mod gives each of them a slight, distinct color variation - brighter, darker, warmer, cooler - so you can tell them apart at a glance while they still clearly look like the same character.\n\nApplies to the character in combat, at rest sites, in the shop and in the treasure room, plus the character portrait, the little character icons on the map, map ink, map pings and remote targeting lines.\n\nDoes nothing in single-player, and nothing when everyone picked a different character. No gameplay changes. No dependencies.\n\nWork-in-progress build shared for testing. Includes a 'tint' dev console command for previewing all four variations without needing four players.",
   "visibility": "unlisted",
-  "changeNote": "New preview image: a grid of all four color shifts for every base-game character.",
+  "changeNote": "Preview image: cell colors are now exactly the in-game map ink, and row titles are outlined in each character's base color.",
   "tags": [],
   "dependencies": [],
   "contentDescriptors": []
