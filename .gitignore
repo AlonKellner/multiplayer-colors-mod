@@ -4,3 +4,5 @@ obj/
 .DS_Store
 .vs/
 .idea/
+__pycache__/
+*.pyc
