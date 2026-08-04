@@ -39,7 +39,7 @@ public class PatchTargetTests
     {
         // A sanity floor: if the reflection above silently finds nothing, the rest of this file passes
         // vacuously.
-        Assert.True(PatchClasses.Count >= 12, $"expected at least 12 patch classes, found {PatchClasses.Count}");
+        Assert.True(PatchClasses.Count >= 13, $"expected at least 13 patch classes, found {PatchClasses.Count}");
     }
 
     [Theory]

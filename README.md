@@ -24,7 +24,9 @@ When N players share a character, each gets one of four variations, assigned by 
 Applied to:
 
 - the character's body in **combat**
-- the figure at the **rest site**
+- their **companions** — Osty, Byrdpip, Pael's Legion, and the Regent's Sovereign Blade — which take their
+  owner's colour rather than one of their own
+- the figure at the **rest site**, companion included
 - the figure in the **shop**
 - the arm sprites in the **treasure room**, including the rock-paper-scissors relic fight
 - the character **portrait** in the top bar and the multiplayer party strip
@@ -33,7 +35,10 @@ Applied to:
 - the player's **map ink** and **map pings**
 - the **remote targeting line** drawn during another player's turn
 
-Nothing else is touched — cards, energy orb, health bars and UI chrome all render normally.
+Nothing else is touched. Anything mechanical stays vanilla: cards, Defect orbs and orb evocation, power and
+intent icons, health bars, targeting arrows, selection reticles, form-VFX auras and UI chrome. That falls
+out of *where* the tint is applied — always the innermost art node — rather than from a list of exclusions,
+so it holds for art this mod has never seen.
 
 ## Determinism
 
