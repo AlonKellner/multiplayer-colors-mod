@@ -32,6 +32,8 @@ Applied to:
 - the character **portrait** in the top bar and the multiplayer party strip
 - the little character **head icons** marking each player's vote on map nodes (and on treasure-room and
   event votes), plus the single-player map marker
+- an **outline in that player's map-drawing colour** on every one of those head icons and on their row in
+  the party side panel — so a line drawn on the map can be traced back to whoever drew it
 - the player's **map ink** and **map pings**
 - the **remote targeting line** drawn during another player's turn
 

@@ -259,7 +259,24 @@ public static class PlayerTint
     /// stale. None of the nodes this mod tints are written by the game after the fact — that is exactly why
     /// each patch targets the innermost art node rather than the container.
     /// </remarks>
-    public static void Apply(CanvasItem? node, Player? player)
+    public static void Apply(CanvasItem? node, Player? player) => Apply(node, player, self: false);
+
+    /// <summary>
+    /// As <see cref="Apply(CanvasItem, Player)" />, but writes <c>SelfModulate</c> — which tints only this
+    /// node's own drawing and does not reach its children.
+    /// </summary>
+    /// <remarks>
+    /// Needed wherever a node has a child we colour separately. The character-head icons carry an outline
+    /// child in the player's ink colour; tinting the head with plain <c>Modulate</c> would multiply into
+    /// that outline and it would no longer be exactly the colour that player draws with, which is the one
+    /// thing the outline has to be.
+    ///
+    /// Only the icon surfaces use this. Combat bodies, companions, rest-site and merchant sprites keep
+    /// plain <c>Modulate</c>, where propagating to child art is exactly what should happen.
+    /// </remarks>
+    public static void ApplySelf(CanvasItem? node, Player? player) => Apply(node, player, self: true);
+
+    private static void Apply(CanvasItem? node, Player? player, bool self)
     {
         if (node == null || player == null)
         {
@@ -272,7 +289,7 @@ public static class PlayerTint
         }
         else
         {
-            entry = new TintedNode(node.Modulate, player);
+            entry = new TintedNode(self ? node.SelfModulate : node.Modulate, player, self);
             Tinted.Add(node, entry);
         }
 
@@ -303,6 +320,48 @@ public static class PlayerTint
     /// </summary>
     public static Color MapInkFor(PlayerVariation variation, Color color) =>
         EnsureMapContrast(Shift(variation, color), color, variation);
+
+    /// <summary>
+    /// The colour to outline a player's character icon with: exactly the ink that player draws with, at the
+    /// supplied alpha.
+    /// </summary>
+    /// <remarks>
+    /// Delegates to <see cref="MapInkFor" /> rather than recomputing, so the outline and the pen can never
+    /// drift apart — an outline in any other colour would be a second, contradictory signal rather than a
+    /// key. Alpha is passed in because the shipped vote-icon outline sits at 75%, and that softness is what
+    /// keeps the character head readable against parchment; we swap the colour, not the transparency.
+    /// </remarks>
+    public static Color OutlineInk(PlayerVariation variation, Color baseInk, float alpha)
+    {
+        var ink = MapInkFor(variation, baseInk);
+        return new Color(ink.R, ink.G, ink.B, alpha);
+    }
+
+    /// <summary>
+    /// The outline colour for a player, or <c>null</c> when they have no variation — in which case the
+    /// vanilla outline should be left exactly as the game drew it.
+    /// </summary>
+    public static Color? OutlineInkFor(Player? player, Color baseInk, float alpha)
+    {
+        var variation = For(player);
+        return variation == null ? null : OutlineInk(variation.Value, baseInk, alpha);
+    }
+
+    /// <summary>Which texture to build a character icon's outline layer from.</summary>
+    /// <remarks>
+    /// <c>CharacterModel.IconOutlineTexture</c> is a convention path — <c>character_icon_&lt;id&gt;_outline.png</c>
+    /// — so a modded character may simply not ship one. Falling back to the character's ordinary icon at
+    /// <see cref="FallbackOutlineScale" /> still yields a shape-following outline, which keeps the promise
+    /// that modded characters work without anyone doing anything.
+    /// </remarks>
+    public static OutlineSource ChooseOutlineSource(bool outlineAvailable) =>
+        outlineAvailable ? OutlineSource.CharacterOutline : OutlineSource.ScaledIcon;
+
+    /// <summary>
+    /// How much to grow the icon by when standing in for a missing outline texture. The shipped outline art
+    /// is the silhouette dilated ~4px on 85px, so this approximates it.
+    /// </summary>
+    public const float FallbackOutlineScale = 1.09f;
 
     /// <summary>Distance from the nearest act's map background — how visible a colour is as map ink.</summary>
     public static float MapBackgroundDistance(Color color)
@@ -508,10 +567,13 @@ public static class PlayerTint
     /// </summary>
     private static readonly ConditionalWeakTable<CanvasItem, TintedNode> Tinted = new();
 
-    private sealed class TintedNode(Color baseModulate, Player player)
+    private sealed class TintedNode(Color baseModulate, Player player, bool self)
     {
         public Color BaseModulate { get; } = baseModulate;
         public Player Player { get; set; } = player;
+
+        /// <summary>Whether this entry owns the node's <c>SelfModulate</c> rather than its <c>Modulate</c>.</summary>
+        public bool Self { get; } = self;
     }
 
     /// <remarks>
@@ -525,6 +587,12 @@ public static class PlayerTint
         var tinted = variation == null
             ? entry.BaseModulate
             : Combine(entry.BaseModulate, Modulate(variation.Value));
+
+        if (entry.Self)
+        {
+            node.SelfModulate = new Color(tinted.R, tinted.G, tinted.B, node.SelfModulate.A);
+            return;
+        }
 
         node.Modulate = new Color(tinted.R, tinted.G, tinted.B, node.Modulate.A);
     }
@@ -564,6 +632,16 @@ public static class PlayerTint
 /// The four variation members are ordered to match <see cref="PlayerVariation" /> so one can be cast to the
 /// other by subtracting <see cref="Brighter" />.
 /// </remarks>
+/// <summary>Which texture a character icon's outline layer is built from.</summary>
+public enum OutlineSource
+{
+    /// <summary>The character's shipped <c>_outline.png</c> — the icon silhouette, pre-dilated.</summary>
+    CharacterOutline,
+
+    /// <summary>The character's ordinary icon, enlarged to stand in for a missing outline texture.</summary>
+    ScaledIcon,
+}
+
 public enum TintOverride
 {
     Auto,

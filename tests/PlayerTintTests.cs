@@ -563,3 +563,109 @@ public class ShiftTests
         Assert.True(onDark > onBright, "a step in dark tones should read as a bigger change than the same step in bright ones");
     }
 }
+
+/// <summary>
+/// The colour key: each player's character icon is outlined in the colour that player draws with, so a line
+/// on the map can be traced back to whoever drew it.
+/// </summary>
+/// <remarks>
+/// Only the colour derivation and the decision rules are covered here. Everything that touches a node —
+/// reading the vote icon's Outline child, writing SelfModulate, building the panel's outline layer — needs a
+/// Godot engine the bare test host does not have, and is verified in game. The point of splitting it this
+/// way is that the untestable half ends up containing no decisions at all.
+/// </remarks>
+public class OutlineTests
+{
+    /// <summary>The alpha the vote icon's Outline node carries in the shipped scene.</summary>
+    private const float SceneAlpha = 0.7529412f;
+
+    [Theory]
+    [MemberData(nameof(ShiftTests.ShippedInks), MemberType = typeof(ShiftTests))]
+    public void OutlineInkMatchesTheInkTheModDrawsWith(string character, string hex)
+    {
+        // The entire feature rests on this. An outline in any colour other than the one that player's pen
+        // draws with is not a key — it is a second, contradictory signal.
+        var ink = new Color(hex);
+
+        foreach (PlayerVariation v in Enum.GetValues<PlayerVariation>())
+        {
+            var pen = PlayerTint.MapInkFor(v, ink);
+            var outline = PlayerTint.OutlineInk(v, ink, SceneAlpha);
+
+            Assert.Equal(pen.R, outline.R, 4);
+            Assert.Equal(pen.G, outline.G, 4);
+            Assert.Equal(pen.B, outline.B, 4);
+        }
+    }
+
+    [Fact]
+    public void OutlineInkKeepsTheGivenAlpha()
+    {
+        // The shipped outline is black at 75% alpha, and that softness is what keeps the head readable
+        // against parchment. We swap the colour, not the transparency.
+        var ink = new Color("CB282B");
+
+        foreach (PlayerVariation v in Enum.GetValues<PlayerVariation>())
+        {
+            Assert.Equal(SceneAlpha, PlayerTint.OutlineInk(v, ink, SceneAlpha).A, 4);
+        }
+    }
+
+    [Fact]
+    public void OutlineInkIsOpaqueWhenAskedToBe()
+    {
+        Assert.Equal(1f, PlayerTint.OutlineInk(PlayerVariation.Warmer, new Color("CB282B"), 1f).A, 4);
+    }
+
+    [Theory]
+    [MemberData(nameof(ShiftTests.ShippedInks), MemberType = typeof(ShiftTests))]
+    public void OutlineInkIsDistinctForEveryVariation(string character, string hex)
+    {
+        AssertFourDistinctOutlines(character, hex);
+    }
+
+    [Theory]
+    [MemberData(nameof(ShiftTests.DegenerateInks), MemberType = typeof(ShiftTests))]
+    public void OutlineInkStaysDistinctForAwkwardModColours(string description, string hex)
+    {
+        // Inherits MapInkFor's degenerate-colour guards. Pins that they keep reaching the outline: an
+        // outline that comes out identical for two players is worse than no outline at all.
+        AssertFourDistinctOutlines(description, hex);
+    }
+
+    private static void AssertFourDistinctOutlines(string label, string hex)
+    {
+        var ink = new Color(hex);
+        var seen = new Dictionary<string, PlayerVariation>();
+
+        foreach (PlayerVariation v in Enum.GetValues<PlayerVariation>())
+        {
+            var html = PlayerTint.OutlineInk(v, ink, SceneAlpha).ToHtml(false);
+            Assert.False(
+                seen.TryGetValue(html, out var clash),
+                $"{label}: {v} and {clash} both outline as #{html}");
+            seen[html] = v;
+        }
+    }
+
+    [Fact]
+    public void UsesTheShippedOutlineTextureWhenAvailable()
+    {
+        Assert.Equal(OutlineSource.CharacterOutline, PlayerTint.ChooseOutlineSource(outlineAvailable: true));
+    }
+
+    [Fact]
+    public void FallsBackToAScaledIconWhenNoOutlineTextureExists()
+    {
+        // character_icon_<id>_outline.png is a convention path, so a modded character may simply not have
+        // one. The store page promises modded characters work automatically, so there has to be a rule.
+        Assert.Equal(OutlineSource.ScaledIcon, PlayerTint.ChooseOutlineSource(outlineAvailable: false));
+    }
+
+    [Fact]
+    public void TheFallbackScaleGrowsTheIconEnoughToShowButNotEnoughToLookWrong()
+    {
+        // The shipped outline art is the silhouette dilated ~4px on 85px, i.e. about 1.09x.
+        Assert.InRange(PlayerTint.FallbackOutlineScale, 1.03f, 1.15f);
+    }
+}
