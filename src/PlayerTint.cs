@@ -259,7 +259,7 @@ public static class PlayerTint
     /// stale. None of the nodes this mod tints are written by the game after the fact — that is exactly why
     /// each patch targets the innermost art node rather than the container.
     /// </remarks>
-    public static void Apply(CanvasItem? node, Player? player) => Apply(node, player, self: false);
+    public static void Apply(CanvasItem? node, Player? player) => Apply(node, player, TintKind.Modulate);
 
     /// <summary>
     /// As <see cref="Apply(CanvasItem, Player)" />, but writes <c>SelfModulate</c> — which tints only this
@@ -274,9 +274,20 @@ public static class PlayerTint
     /// Only the icon surfaces use this. Combat bodies, companions, rest-site and merchant sprites keep
     /// plain <c>Modulate</c>, where propagating to child art is exactly what should happen.
     /// </remarks>
-    public static void ApplySelf(CanvasItem? node, Player? player) => Apply(node, player, self: true);
+    public static void ApplySelf(CanvasItem? node, Player? player) => Apply(node, player, TintKind.SelfModulate);
 
-    private static void Apply(CanvasItem? node, Player? player, bool self)
+    /// <summary>
+    /// Colours an outline node with the player's map ink, tracked so <see cref="Refresh" /> repaints it.
+    /// </summary>
+    /// <remarks>
+    /// Registered rather than assigned directly so the <c>tint</c> console command moves outlines live along
+    /// with everything else — and so <c>tint auto</c> restores the vanilla outline colour instead of leaving
+    /// the last forced one behind.
+    /// </remarks>
+    public static void ApplyOutline(CanvasItem? node, Player? player, Color baseInk) =>
+        Apply(node, player, TintKind.Outline, baseInk);
+
+    private static void Apply(CanvasItem? node, Player? player, TintKind kind, Color baseInk = default)
     {
         if (node == null || player == null)
         {
@@ -289,7 +300,8 @@ public static class PlayerTint
         }
         else
         {
-            entry = new TintedNode(self ? node.SelfModulate : node.Modulate, player, self);
+            var baseColour = kind == TintKind.SelfModulate ? node.SelfModulate : node.Modulate;
+            entry = new TintedNode(baseColour, player, kind, baseInk);
             Tinted.Add(node, entry);
         }
 
@@ -567,13 +579,27 @@ public static class PlayerTint
     /// </summary>
     private static readonly ConditionalWeakTable<CanvasItem, TintedNode> Tinted = new();
 
-    private sealed class TintedNode(Color baseModulate, Player player, bool self)
+    /// <summary>What a tracked node's colour is computed from.</summary>
+    private enum TintKind
+    {
+        /// <summary>Sprite multiplier folded into <c>Modulate</c>; propagates to children.</summary>
+        Modulate,
+
+        /// <summary>Sprite multiplier folded into <c>SelfModulate</c>; does not reach children.</summary>
+        SelfModulate,
+
+        /// <summary>The player's map-ink colour, for an icon outline.</summary>
+        Outline,
+    }
+
+    private sealed class TintedNode(Color baseModulate, Player player, TintKind kind, Color baseInk)
     {
         public Color BaseModulate { get; } = baseModulate;
         public Player Player { get; set; } = player;
+        public TintKind Kind { get; } = kind;
 
-        /// <summary>Whether this entry owns the node's <c>SelfModulate</c> rather than its <c>Modulate</c>.</summary>
-        public bool Self { get; } = self;
+        /// <summary>The character's vanilla map colour. Only meaningful for <see cref="TintKind.Outline" />.</summary>
+        public Color BaseInk { get; } = baseInk;
     }
 
     /// <remarks>
@@ -584,11 +610,22 @@ public static class PlayerTint
     private static void Repaint(CanvasItem node, TintedNode entry)
     {
         var variation = For(entry.Player);
+
+        if (entry.Kind == TintKind.Outline)
+        {
+            // Reverts to the vanilla outline colour when the variation goes away — which is what makes
+            // `tint auto` put a solo map marker back to normal.
+            node.Modulate = variation == null
+                ? entry.BaseModulate
+                : OutlineInk(variation.Value, entry.BaseInk, entry.BaseModulate.A);
+            return;
+        }
+
         var tinted = variation == null
             ? entry.BaseModulate
             : Combine(entry.BaseModulate, Modulate(variation.Value));
 
-        if (entry.Self)
+        if (entry.Kind == TintKind.SelfModulate)
         {
             node.SelfModulate = new Color(tinted.R, tinted.G, tinted.B, node.SelfModulate.A);
             return;

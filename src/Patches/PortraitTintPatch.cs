@@ -46,11 +46,6 @@ public static class TopBarPortraitTintPatch
 [HarmonyPatch(typeof(NMultiplayerPlayerState), nameof(NMultiplayerPlayerState._Ready))]
 public static class PartyIconTintPatch
 {
-    private const string OutlineNodeName = "MultiplayerColorsOutline";
-
-    /// <summary>Matches the alpha the game uses on the vote icons' outline.</summary>
-    private const float OutlineAlpha = 0.7529412f;
-
     [HarmonyPostfix]
     public static void Postfix(NMultiplayerPlayerState __instance)
     {
@@ -63,82 +58,19 @@ public static class PartyIconTintPatch
                 return;
             }
 
-            // SelfModulate so the head's tint does not multiply into the outline we add below.
+            // SelfModulate so the head's tint does not multiply into the outline attached below.
             PlayerTint.ApplySelf(icon, player);
 
-            var ink = PlayerTint.OutlineInkFor(player, player.Character.MapDrawingColor, OutlineAlpha);
-            if (ink == null)
-            {
-                return;
-            }
-
-            AddOutline(icon, player, ink.Value);
+            IconOutline.Attach(
+                icon,
+                player,
+                CharacterArt.IconOutlineOrNull(player),
+                player.Character.IconTexture,
+                player.Character.MapDrawingColor);
         }
         catch (Exception e)
         {
             MainFile.Logger.Error($"PartyIconTintPatch failed: {e}");
-        }
-    }
-
-    private static void AddOutline(TextureRect icon, Player player, Color ink)
-    {
-        // Named and checked so a re-_Ready cannot stack duplicates on top of each other.
-        if (icon.GetNodeOrNull<TextureRect>(OutlineNodeName) != null)
-        {
-            return;
-        }
-
-        var outlineTexture = LoadOutlineTexture(player);
-        var source = PlayerTint.ChooseOutlineSource(outlineTexture != null);
-
-        var outline = new TextureRect
-        {
-            Name = OutlineNodeName,
-            Texture = outlineTexture ?? player.Character.IconTexture,
-            ShowBehindParent = true,
-            Modulate = ink,
-            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
-            MouseFilter = Control.MouseFilterEnum.Ignore,
-        };
-
-        outline.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-
-        // The shipped outline art is already dilated, so it wants a congruent rect. The fallback is the
-        // plain icon, which has to be grown to peek out from behind.
-        //
-        // Grown via negative offsets rather than Scale: this runs inside _Ready, before layout, so Size is
-        // not reliable yet and a pivot-based scale would grow from the corner. Anchors plus offsets are
-        // resolved by the layout pass itself.
-        if (source == OutlineSource.ScaledIcon)
-        {
-            var size = icon.Size != Vector2.Zero
-                ? icon.Size
-                : new Vector2(icon.OffsetRight - icon.OffsetLeft, icon.OffsetBottom - icon.OffsetTop);
-
-            var grow = size * (PlayerTint.FallbackOutlineScale - 1f) * 0.5f;
-            outline.OffsetLeft = -grow.X;
-            outline.OffsetTop = -grow.Y;
-            outline.OffsetRight = grow.X;
-            outline.OffsetBottom = grow.Y;
-        }
-
-        icon.AddChild(outline);
-        icon.MoveChild(outline, 0);
-    }
-
-    /// <summary>
-    /// The character's <c>_outline.png</c>, or null when it has none — a modded character need not ship one,
-    /// and asking the cache for a missing texture is not guaranteed to fail quietly.
-    /// </summary>
-    private static Texture2D? LoadOutlineTexture(Player player)
-    {
-        try
-        {
-            return player.Character.IconOutlineTexture;
-        }
-        catch (Exception)
-        {
-            return null;
         }
     }
 }

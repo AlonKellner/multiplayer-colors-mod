@@ -43,19 +43,13 @@ public static class VoteIconTintPatch
                 // about to set to the exact colour that player draws with.
                 PlayerTint.ApplySelf(vote.node, vote.player);
 
-                var outline = vote.node.GetNodeOrNull<TextureRect>("Outline");
-                if (outline == null)
-                {
-                    continue;
-                }
-
                 // Swap the RGB, keep the scene's 75% alpha — that softness is what keeps the character head
-                // readable against the parchment. Left untouched (vanilla black) when there is no variation.
-                var ink = PlayerTint.OutlineInkFor(vote.player, vote.player.Character.MapDrawingColor, outline.Modulate.A);
-                if (ink != null)
-                {
-                    outline.Modulate = ink.Value;
-                }
+                // readable against the parchment. Tracked rather than assigned, so the `tint` command moves
+                // it live and `tint auto` puts the vanilla black back.
+                PlayerTint.ApplyOutline(
+                    vote.node.GetNodeOrNull<TextureRect>("Outline"),
+                    vote.player,
+                    vote.player.Character.MapDrawingColor);
             }
         }
         catch (Exception e)
@@ -66,13 +60,18 @@ public static class VoteIconTintPatch
 }
 
 /// <summary>
-/// Tints the character marker that hops between nodes on the map.
+/// Tints and outlines the character marker that hops between nodes on the map.
 /// </summary>
 /// <remarks>
 /// The base game only ever shows this in single-player (<c>_isEnabled = Players.Count == 1</c>), so it can
-/// never collide with a duplicate in a real run. It is tinted anyway so that the <c>tint</c> console
-/// command's preview covers the map as well as the character art — otherwise the one place you can force a
-/// variation solo is the one place you could not see it.
+/// never collide with a duplicate in a real run — in co-op the vote icons replace it entirely. It is handled
+/// anyway so the <c>tint</c> console command's preview covers the map, outline included: this marker is the
+/// only per-player map icon that exists solo, so without it there is no way to see the outline work without
+/// a second player. In ordinary solo play no variation is active, so nothing here changes.
+///
+/// Unlike the vote icons this uses a different art family — <c>map_marker_&lt;id&gt;.png</c>, with no outline
+/// counterpart — so the outline is built from the marker art itself, grown. The marker is not square and its
+/// node keeps aspect, which is why <see cref="IconOutline" /> copies the parent's stretch settings.
 /// </remarks>
 [HarmonyPatch(typeof(NMapMarker), nameof(NMapMarker.Initialize))]
 public static class MapMarkerTintPatch
@@ -82,7 +81,14 @@ public static class MapMarkerTintPatch
     {
         try
         {
-            PlayerTint.Apply(__instance, player);
+            PlayerTint.ApplySelf(__instance, player);
+
+            IconOutline.Attach(
+                __instance,
+                player,
+                outlineTexture: null,
+                fallbackTexture: player.Character.MapMarker,
+                player.Character.MapDrawingColor);
         }
         catch (Exception e)
         {
