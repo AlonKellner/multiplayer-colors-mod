@@ -142,7 +142,7 @@ public static class PlayerTint
             return Override == TintOverride.Off ? null : (PlayerVariation)(Override - TintOverride.Brighter);
         }
 
-        return Resolve(run.Players, player, p => p?.Character?.Id, p => run.GetPlayerSlotIndex(p));
+        return Resolve(run.Players, player, p => p?.Character?.Id, p => p?.NetId ?? 0UL);
     }
 
     /// <summary>
@@ -154,12 +154,15 @@ public static class PlayerTint
     /// Identifies which character a roster entry picked; entries comparing equal are duplicates of each
     /// other. <c>null</c> keys never match anything, including each other.
     /// </param>
-    /// <param name="slotIndex">The run's network-authoritative per-player ordinal.</param>
+    /// <param name="identity">
+    /// The player's network id — a value that is the same on every client by construction, which is what
+    /// makes the assignment agree across the lobby.
+    /// </param>
     public static PlayerVariation? Resolve<T>(
         IReadOnlyList<T>? roster,
         T player,
         Func<T, object?> characterKey,
-        Func<T, int> slotIndex)
+        Func<T, ulong> identity)
         where T : class
     {
         if (roster == null || roster.Count <= 1)
@@ -173,10 +176,12 @@ public static class PlayerTint
             return null;
         }
 
-        // Ordinal among everyone sharing this character, by ascending slot index.
+        // Ordinal among everyone sharing this character, by ascending network id. Deliberately NOT by
+        // position in the roster: list order is only consistent across clients by convention, and if it
+        // ever differs the whole lobby disagrees about who is which colour.
         var ordinal = 0;
         var duplicates = 0;
-        var mySlot = slotIndex(player);
+        var mine = identity(player);
         foreach (var other in roster)
         {
             if (other == null || !myKey.Equals(characterKey(other)))
@@ -185,7 +190,7 @@ public static class PlayerTint
             }
 
             duplicates++;
-            if (slotIndex(other) < mySlot)
+            if (identity(other) < mine)
             {
                 ordinal++;
             }

@@ -7,12 +7,15 @@ namespace MultiplayerColors.Tests;
 /// A stand-in for a roster entry. A real <c>Player</c> can only be built through <c>ModelDb</c>, which
 /// needs a running game, so the roster logic is tested through <see cref="PlayerTint.Resolve{T}" />.
 /// </summary>
-internal sealed record Seat(string Character, int Slot);
+/// <remarks>
+/// <c>NetId</c> stands in for the player's network id — the thing that is identical on every client.
+/// </remarks>
+internal sealed record Seat(string Character, ulong NetId);
 
 public class ResolveTests
 {
     private static PlayerVariation? Resolve(IReadOnlyList<Seat> roster, Seat seat) =>
-        PlayerTint.Resolve(roster, seat, s => s.Character, s => s.Slot);
+        PlayerTint.Resolve(roster, seat, s => s.Character, s => s.NetId);
 
     [Fact]
     public void SinglePlayerRun_HasNoVariation()
@@ -36,7 +39,7 @@ public class ResolveTests
     }
 
     [Fact]
-    public void FourWayDuplicate_GetsAllFourVariationsInSlotOrder()
+    public void FourWayDuplicate_GetsAllFourVariationsInIdOrder()
     {
         var roster = new[]
         {
@@ -53,22 +56,61 @@ public class ResolveTests
     }
 
     [Fact]
-    public void AssignmentFollowsSlotIndex_NotListOrder()
+    public void EveryClientAgreesEvenIfTheirRostersAreOrderedDifferently()
     {
-        // The same four seats, enumerated in the reverse of their slot order — which is exactly what the
-        // local-player-first UIs do. The colours must not move.
-        var bySlot = new[]
+        // The reported bug: players saw different colours from each other. Assignment used to be keyed on
+        // position in RunState.Players, which is only consistent by convention. Keyed on the network id
+        // instead, two clients holding the same players in different orders cannot disagree.
+        var seats = new[]
+        {
+            new Seat("ironclad", 7701),
+            new Seat("ironclad", 4402),
+            new Seat("silent", 9903),
+            new Seat("ironclad", 1104),
+        };
+
+        var clientA = seats.ToArray();
+        var clientB = new[] { seats[2], seats[0], seats[3], seats[1] };
+
+        foreach (var seat in seats)
+        {
+            Assert.Equal(Resolve(clientA, seat), Resolve(clientB, seat));
+        }
+    }
+
+    [Fact]
+    public void AssignmentIsOrderedByNetworkIdNotByPosition()
+    {
+        // Lowest id first, regardless of where each sits in the list.
+        var roster = new[]
+        {
+            new Seat("ironclad", 500),
+            new Seat("ironclad", 100),
+            new Seat("ironclad", 300),
+        };
+
+        Assert.Equal(PlayerVariation.Brighter, Resolve(roster, roster[1])); // id 100
+        Assert.Equal(PlayerVariation.Darker, Resolve(roster, roster[2]));   // id 300
+        Assert.Equal(PlayerVariation.Warmer, Resolve(roster, roster[0]));   // id 500
+    }
+
+    [Fact]
+    public void AssignmentFollowsNetworkId_NotListOrder()
+    {
+        // The same four seats, enumerated out of id order — which is exactly what the
+        // local-player-first UIs do to their own copies. The colours must not move.
+        var byId = new[]
         {
             new Seat("ironclad", 0),
             new Seat("ironclad", 1),
             new Seat("ironclad", 2),
             new Seat("ironclad", 3),
         };
-        var shuffled = new[] { bySlot[2], bySlot[0], bySlot[3], bySlot[1] };
+        var shuffled = new[] { byId[2], byId[0], byId[3], byId[1] };
 
-        foreach (var seat in bySlot)
+        foreach (var seat in byId)
         {
-            Assert.Equal(Resolve(bySlot, seat), Resolve(shuffled, seat));
+            Assert.Equal(Resolve(byId, seat), Resolve(shuffled, seat));
         }
     }
 
@@ -109,15 +151,15 @@ public class ResolveTests
     public void NullCharacterKey_YieldsNoVariation()
     {
         var roster = new[] { new Seat("ironclad", 0), new Seat("ironclad", 1) };
-        Assert.Null(PlayerTint.Resolve<Seat>(roster, roster[0], _ => null, s => s.Slot));
+        Assert.Null(PlayerTint.Resolve<Seat>(roster, roster[0], _ => null, s => s.NetId));
     }
 
     [Fact]
     public void EmptyOrNullRoster_YieldsNoVariation()
     {
         var seat = new Seat("ironclad", 0);
-        Assert.Null(PlayerTint.Resolve<Seat>(null, seat, s => s.Character, s => s.Slot));
-        Assert.Null(PlayerTint.Resolve(Array.Empty<Seat>(), seat, s => s.Character, s => s.Slot));
+        Assert.Null(PlayerTint.Resolve<Seat>(null, seat, s => s.Character, s => s.NetId));
+        Assert.Null(PlayerTint.Resolve(Array.Empty<Seat>(), seat, s => s.Character, s => s.NetId));
     }
 }
 

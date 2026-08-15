@@ -154,7 +154,9 @@ public class TintConsoleCmd : AbstractConsoleCmd
     private static string Status() => PlayerTint.Override switch
     {
         TintOverride.Auto => "tint: auto — only players sharing a character are tinted.",
-        TintOverride.Off => "tint: off — tinting disabled for you.",
-        var forced => $"tint: {forced.ToString().ToLowerInvariant()} — forced on you.",
+        TintOverride.Off => "tint: off — tinting disabled for you (local only; teammates still see you by the normal rule).",
+        var forced => $"tint: {forced.ToString().ToLowerInvariant()} — forced on you. "
+            + "LOCAL ONLY: teammates still see you by the normal rule, so your screens will disagree "
+            + "until you run 'tint auto'.",
     };
 }
