@@ -109,6 +109,82 @@ public class TintConsoleCmdTests : IDisposable
     }
 
     [Fact]
+    public void SetsTheOutlineThickness()
+    {
+        try
+        {
+            var result = _cmd.Process(null, ["outline", "4"]);
+
+            Assert.True(result.success, result.msg);
+            Assert.Equal(4f, PlayerTint.OutlineThickness, 3);
+        }
+        finally
+        {
+            PlayerTint.OutlineThickness = PlayerTint.DefaultOutlineThickness;
+        }
+    }
+
+    [Fact]
+    public void ClampsAnOutOfRangeThickness()
+    {
+        try
+        {
+            Assert.True(_cmd.Process(null, ["outline", "500"]).success);
+            Assert.Equal(PlayerTint.MaxOutlineThickness, PlayerTint.OutlineThickness, 3);
+        }
+        finally
+        {
+            PlayerTint.OutlineThickness = PlayerTint.DefaultOutlineThickness;
+        }
+    }
+
+    [Fact]
+    public void ReportsTheThicknessWhenGivenNoNumber()
+    {
+        var result = _cmd.Process(null, ["outline"]);
+
+        Assert.True(result.success);
+        Assert.Contains("outline", result.msg, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RejectsAThicknessThatIsNotANumber()
+    {
+        var before = PlayerTint.OutlineThickness;
+
+        var result = _cmd.Process(null, ["outline", "thick"]);
+
+        Assert.False(result.success);
+        Assert.Equal(before, PlayerTint.OutlineThickness, 3);
+    }
+
+    [Fact]
+    public void OutlineIsNotMistakenForAVariation()
+    {
+        // "outline" shares the argument slot with the variation names; setting thickness must not silently
+        // clear the variation the user is previewing.
+        PlayerTint.Override = TintOverride.Warmer;
+        try
+        {
+            _cmd.Process(null, ["outline", "2"]);
+            Assert.Equal(TintOverride.Warmer, PlayerTint.Override);
+        }
+        finally
+        {
+            PlayerTint.OutlineThickness = PlayerTint.DefaultOutlineThickness;
+        }
+    }
+
+    [Fact]
+    public void ReportsDiagnostics()
+    {
+        var result = _cmd.Process(null, ["diag"]);
+
+        Assert.True(result.success, result.msg);
+        Assert.False(string.IsNullOrWhiteSpace(result.msg));
+    }
+
+    [Fact]
     public void OverrideIsLocalOnly()
     {
         // The command must not be networked: it changes only what this client draws, so forcing a colour

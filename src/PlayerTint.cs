@@ -284,10 +284,15 @@ public static class PlayerTint
     /// with everything else — and so <c>tint auto</c> restores the vanilla outline colour instead of leaving
     /// the last forced one behind.
     /// </remarks>
-    public static void ApplyOutline(CanvasItem? node, Player? player, Color baseInk) =>
-        Apply(node, player, TintKind.Outline, baseInk);
+    public static void ApplyOutline(CanvasItem? node, Player? player, Color baseInk, float activeAlpha) =>
+        Apply(node, player, TintKind.Outline, baseInk, activeAlpha);
 
-    private static void Apply(CanvasItem? node, Player? player, TintKind kind, Color baseInk = default)
+    private static void Apply(
+        CanvasItem? node,
+        Player? player,
+        TintKind kind,
+        Color baseInk = default,
+        float activeAlpha = 1f)
     {
         if (node == null || player == null)
         {
@@ -301,7 +306,7 @@ public static class PlayerTint
         else
         {
             var baseColour = kind == TintKind.SelfModulate ? node.SelfModulate : node.Modulate;
-            entry = new TintedNode(baseColour, player, kind, baseInk);
+            entry = new TintedNode(baseColour, player, kind, baseInk, activeAlpha);
             Tinted.Add(node, entry);
         }
 
@@ -374,6 +379,28 @@ public static class PlayerTint
     /// is the silhouette dilated ~4px on 85px, so this approximates it.
     /// </summary>
     public const float FallbackOutlineScale = 1.09f;
+
+    /// <summary>The colour an outline this mod created takes when its player has no variation.</summary>
+    /// <remarks>
+    /// Fully transparent, not black: these outlines do not exist in the vanilla game, so with no variation
+    /// they have to vanish rather than fall back to some colour of their own. The game's own vote-icon
+    /// outline is a different case — it reverts to the black it was born with, which
+    /// <see cref="ApplyOutline" /> captures automatically.
+    /// </remarks>
+    public static readonly Color DormantOutline = new(0f, 0f, 0f, 0f);
+
+    /// <summary>How far an outline extends past its icon, in pixels. Tunable live via <c>tint outline</c>.</summary>
+    public static float OutlineThickness { get; set; } = DefaultOutlineThickness;
+
+    public const float DefaultOutlineThickness = 3f;
+
+    /// <summary>Zero is allowed — it is how you turn outlines off without turning the tint off.</summary>
+    public const float MinOutlineThickness = 0f;
+
+    public const float MaxOutlineThickness = 12f;
+
+    public static float ClampThickness(float pixels) =>
+        Mathf.Clamp(pixels, MinOutlineThickness, MaxOutlineThickness);
 
     /// <summary>Distance from the nearest act's map background — how visible a colour is as map ink.</summary>
     public static float MapBackgroundDistance(Color color)
@@ -592,7 +619,7 @@ public static class PlayerTint
         Outline,
     }
 
-    private sealed class TintedNode(Color baseModulate, Player player, TintKind kind, Color baseInk)
+    private sealed class TintedNode(Color baseModulate, Player player, TintKind kind, Color baseInk, float activeAlpha)
     {
         public Color BaseModulate { get; } = baseModulate;
         public Player Player { get; set; } = player;
@@ -600,6 +627,13 @@ public static class PlayerTint
 
         /// <summary>The character's vanilla map colour. Only meaningful for <see cref="TintKind.Outline" />.</summary>
         public Color BaseInk { get; } = baseInk;
+
+        /// <summary>
+        /// The alpha an outline takes while a variation is active. Held separately from
+        /// <see cref="BaseModulate" /> because an outline we created starts fully transparent, so its base
+        /// alpha is the wrong thing to show it at.
+        /// </summary>
+        public float ActiveAlpha { get; } = activeAlpha;
     }
 
     /// <remarks>
@@ -617,7 +651,7 @@ public static class PlayerTint
             // `tint auto` put a solo map marker back to normal.
             node.Modulate = variation == null
                 ? entry.BaseModulate
-                : OutlineInk(variation.Value, entry.BaseInk, entry.BaseModulate.A);
+                : OutlineInk(variation.Value, entry.BaseInk, entry.ActiveAlpha);
             return;
         }
 
@@ -643,6 +677,24 @@ public static class PlayerTint
     /// to walk — but they are all recreated per stroke / per ping / per turn, so they pick the override up
     /// on their own the next time they're drawn.
     /// </remarks>
+    /// <summary>How many nodes this mod is currently tracking. Reported by <c>tint diag</c>.</summary>
+    public static int TrackedCount
+    {
+        get
+        {
+            var count = 0;
+            foreach (var (node, _) in Tinted)
+            {
+                if (GodotObject.IsInstanceValid(node))
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+    }
+
     public static int Refresh()
     {
         var repainted = 0;

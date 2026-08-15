@@ -46,10 +46,12 @@ public static class VoteIconTintPatch
                 // Swap the RGB, keep the scene's 75% alpha — that softness is what keeps the character head
                 // readable against the parchment. Tracked rather than assigned, so the `tint` command moves
                 // it live and `tint auto` puts the vanilla black back.
-                PlayerTint.ApplyOutline(
-                    vote.node.GetNodeOrNull<TextureRect>("Outline"),
-                    vote.player,
-                    vote.player.Character.MapDrawingColor);
+                var outline = vote.node.GetNodeOrNull<TextureRect>("Outline");
+                PlayerTint.ApplyOutline(outline, vote.player, vote.player.Character.MapDrawingColor, IconOutline.Alpha);
+
+                // Registered for geometry too, so `tint outline` reaches the game's own outline as well as
+                // the ones this mod builds. It collapses back to the scene's size while nothing is tinted.
+                IconOutline.Track(outline, vote.node, vote.player);
             }
         }
         catch (Exception e)

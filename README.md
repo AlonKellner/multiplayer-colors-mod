@@ -85,7 +85,16 @@ tint warmer
 tint cooler
 tint off            # no tint at all
 tint auto           # back to normal (only players sharing a character get tinted)
+
+tint outline        # report icon outline thickness
+tint outline 5      # set it, in pixels (0-12; 0 hides the outline)
+tint diag           # what the mod has actually done, and recent outline activity
+tint diag on        # also write that activity to the game log
 ```
+
+The single-player map marker is outlined too, purely so this works solo — it is the only per-player map
+icon that exists outside co-op. Like everything else it stays dormant until a variation is active, which in
+single-player means until you force one here.
 
 It recolours what's already on screen, so you don't have to change rooms to see the effect. It applies to
 **you only** — teammates stay on the normal rule, so you can hold a forced colour next to a real one — and

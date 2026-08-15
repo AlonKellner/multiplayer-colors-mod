@@ -668,4 +668,29 @@ public class OutlineTests
         // The shipped outline art is the silhouette dilated ~4px on 85px, i.e. about 1.09x.
         Assert.InRange(PlayerTint.FallbackOutlineScale, 1.03f, 1.15f);
     }
+
+    [Fact]
+    public void ThicknessDefaultsToSomethingVisible()
+    {
+        Assert.InRange(PlayerTint.DefaultOutlineThickness, 1f, 6f);
+    }
+
+    [Theory]
+    [InlineData(-10f, PlayerTint.MinOutlineThickness)]
+    [InlineData(0f, 0f)]
+    [InlineData(4f, 4f)]
+    [InlineData(999f, PlayerTint.MaxOutlineThickness)]
+    public void ThicknessIsClampedToARangeThatCannotLookBroken(float requested, float expected)
+    {
+        // Zero is allowed — it is how you turn the outline off without turning the tint off.
+        Assert.Equal(expected, PlayerTint.ClampThickness(requested), 3);
+    }
+
+    [Fact]
+    public void AnInactiveOutlineIsFullyTransparent()
+    {
+        // Outlines this mod creates did not exist in the vanilla game, so with no variation they have to
+        // disappear rather than fall back to some colour. This is what keeps ordinary solo play untouched.
+        Assert.Equal(0f, PlayerTint.DormantOutline.A, 4);
+    }
 }

@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Godot;
 using MegaCrit.Sts2.Core.Entities.Players;
 
@@ -11,6 +12,11 @@ namespace MultiplayerColors;
 /// panel's icon and the single-player map marker have nothing, so the layer gets built here — copying the
 /// game's own idiom: a <c>TextureRect</c> drawn behind its parent via <c>ShowBehindParent</c>, filling the
 /// same rect.
+///
+/// The layer is created whether or not a variation is currently active, and simply sits fully transparent
+/// while it is not. That matters for timing: <c>NMapMarker.Initialize</c> runs once when the map screen is
+/// built, long before anyone types <c>tint warmer</c>, so an outline created only when a variation already
+/// existed would never be created at all — and <c>Refresh</c> would have nothing to repaint.
 /// </remarks>
 public static class IconOutline
 {
@@ -18,6 +24,29 @@ public static class IconOutline
 
     /// <summary>Matches the alpha the game uses on the vote icons' outline.</summary>
     public const float Alpha = 0.7529412f;
+
+    /// <summary>
+    /// Outlines this mod created, with the icon each belongs to, so thickness changes can be re-applied to
+    /// what is already on screen. Weak keys — a freed node drops out on its own.
+    /// </summary>
+    private static readonly ConditionalWeakTable<TextureRect, OutlineHost> Attached = new();
+
+    private sealed record OutlineHost(TextureRect Icon, Player Player);
+
+    /// <summary>
+    /// Registers an outline the game already ships — the multiplayer vote icon's — so that thickness reaches
+    /// it too. Its colour is handled by the caller; only geometry is managed here.
+    /// </summary>
+    public static void Track(TextureRect? outline, TextureRect? icon, Player? player)
+    {
+        if (outline == null || icon == null || player == null)
+        {
+            return;
+        }
+
+        Attached.AddOrUpdate(outline, new OutlineHost(icon, player));
+        ApplyThickness(outline, player);
+    }
 
     /// <summary>
     /// Attaches (or updates) an outline behind <paramref name="icon" />, coloured with the player's map ink.
@@ -39,23 +68,18 @@ public static class IconOutline
             return;
         }
 
-        // Nothing to show unless this player actually has a variation — automatic, or forced via `tint`.
-        if (PlayerTint.For(player) == null && icon.GetNodeOrNull<TextureRect>(NodeName) == null)
-        {
-            return;
-        }
-
         var existing = icon.GetNodeOrNull<TextureRect>(NodeName);
         if (existing != null)
         {
-            PlayerTint.ApplyOutline(existing, player, baseInk);
+            ApplyThickness(existing, player);
+            PlayerTint.ApplyOutline(existing, player, baseInk, Alpha);
             return;
         }
 
-        var source = PlayerTint.ChooseOutlineSource(outlineTexture != null);
         var texture = outlineTexture ?? fallbackTexture;
         if (texture == null)
         {
+            Diagnostics.Log($"outline skipped for {player.Character?.Id}: no icon or outline texture");
             return;
         }
 
@@ -67,37 +91,71 @@ public static class IconOutline
             MouseFilter = Control.MouseFilterEnum.Ignore,
 
             // Render the silhouette exactly as the icon renders itself, or it will not line up — the map
-            // marker art is not square and its parent keeps aspect.
+            // marker art is not square and its node keeps aspect.
             ExpandMode = icon.ExpandMode,
             StretchMode = icon.StretchMode,
+
+            // Born invisible so ApplyOutline records "transparent" as the colour to revert to.
+            Modulate = PlayerTint.DormantOutline,
         };
 
         outline.SetAnchorsPreset(Control.LayoutPreset.FullRect);
 
-        // The shipped outline art is already dilated, so it wants a congruent rect. The fallback is the
-        // plain icon and has to be grown to peek out from behind.
-        //
-        // Grown via offsets rather than Scale: this runs before layout, so Size is not reliable yet and a
-        // pivot-based scale would grow from the corner. Anchors plus offsets are resolved by layout itself.
-        if (source == OutlineSource.ScaledIcon)
-        {
-            var size = icon.Size != Vector2.Zero
-                ? icon.Size
-                : new Vector2(icon.OffsetRight - icon.OffsetLeft, icon.OffsetBottom - icon.OffsetTop);
-
-            var grow = size * (PlayerTint.FallbackOutlineScale - 1f) * 0.5f;
-            outline.OffsetLeft = -grow.X;
-            outline.OffsetTop = -grow.Y;
-            outline.OffsetRight = grow.X;
-            outline.OffsetBottom = grow.Y;
-        }
-
-        // Start from the vanilla outline colour so ApplyOutline records the right base to revert to.
-        outline.Modulate = new Color(0f, 0f, 0f, Alpha);
-
         icon.AddChild(outline);
         icon.MoveChild(outline, 0);
+        Attached.AddOrUpdate(outline, new OutlineHost(icon, player));
 
-        PlayerTint.ApplyOutline(outline, player, baseInk);
+        ApplyThickness(outline, player);
+        PlayerTint.ApplyOutline(outline, player, baseInk, Alpha);
+
+        Diagnostics.Log(
+            $"outline attached to {icon.Name} for {player.Character?.Id} "
+            + $"(source={(outlineTexture != null ? "shipped" : "grown icon")}, "
+            + $"thickness={PlayerTint.OutlineThickness}px, variation={PlayerTint.For(player)?.ToString() ?? "none"})");
+    }
+
+    /// <summary>
+    /// Re-applies the current thickness to every outline already on screen. Called after
+    /// <c>tint outline</c> changes it, so the effect is visible without changing rooms.
+    /// </summary>
+    public static int RefreshThickness()
+    {
+        var updated = 0;
+        foreach (var (outline, host) in Attached)
+        {
+            if (!GodotObject.IsInstanceValid(outline) || !GodotObject.IsInstanceValid(host.Icon))
+            {
+                continue;
+            }
+
+            ApplyThickness(outline, host.Player);
+            updated++;
+        }
+
+        return updated;
+    }
+
+    /// <summary>
+    /// Grows the outline past its icon by <see cref="PlayerTint.OutlineThickness" /> pixels — or leaves it
+    /// exactly congruent when the player has no variation.
+    /// </summary>
+    /// <remarks>
+    /// Collapsing to zero when dormant is what keeps the game's own vote-icon outline vanilla: that one
+    /// exists with or without this mod, so while nothing is tinted it has to sit at the size the scene gave
+    /// it. Outlines this mod created are transparent when dormant, so their geometry is moot either way.
+    ///
+    /// Grown via offsets rather than Scale: this can run before layout, where Size is not yet reliable and a
+    /// pivot-based scale would grow from the corner. Anchors plus offsets are resolved by layout itself.
+    /// </remarks>
+    private static void ApplyThickness(TextureRect outline, Player player)
+    {
+        var grow = PlayerTint.For(player) == null
+            ? 0f
+            : PlayerTint.ClampThickness(PlayerTint.OutlineThickness);
+
+        outline.OffsetLeft = -grow;
+        outline.OffsetTop = -grow;
+        outline.OffsetRight = grow;
+        outline.OffsetBottom = grow;
     }
 }
