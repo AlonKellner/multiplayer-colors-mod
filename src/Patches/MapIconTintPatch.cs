@@ -236,9 +236,11 @@ public static class MapMarkerTintPatch
         preview.GetNode<TextureRect>("Outline").Texture = player.Character.IconOutlineTexture;
         preview.PivotOffset = preview.Size * 0.5f;
 
+        // Only the requested height is meaningful here: this runs before the layout pass, so the icon's own
+        // Size is still whatever it was built with. `tint diag`, which runs later, reports the real one.
         Diagnostics.Log(
-            $"vote icon preview: box={box.Size} icon={preview.Size} "
-            + $"measured={height}px for {player.Character?.Id}");
+            $"vote icon preview: container={height}px (icon sized by the layout pass) "
+            + $"for {player.Character?.Id}");
 
         // And the same tint path the real vote icons take.
         PlayerTint.ApplySelf(preview, player);
