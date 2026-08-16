@@ -1,6 +1,7 @@
 using Godot;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Entities.Players;
+using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Nodes.CommonUi;
 using MegaCrit.Sts2.Core.Nodes.Screens.Map;
 
@@ -80,6 +81,8 @@ public static class VoteIconTintPatch
 [HarmonyPatch(typeof(NMapMarker), nameof(NMapMarker.Initialize))]
 public static class MapMarkerTintPatch
 {
+    private const string PreviewNodeName = "MultiplayerColorsVoteIconPreview";
+
     private static WeakReference<NMapMarker>? _marker;
     private static Player? _player;
 
@@ -105,20 +108,14 @@ public static class MapMarkerTintPatch
                 return false;
             }
 
-            // `tint icon character` swaps the marker's own art for the head icon the multiplayer vote
-            // pins use, so the co-op look can be judged without a second player. The shipped outline
-            // silhouette only exists for that head art; the marker art has none, so it grows its own.
-            var useCharacter = PlayerTint.UseCharacterIconOnMap;
-            marker.Texture = useCharacter ? _player.Character.IconTexture : _player.Character.MapMarker;
-
-            PlayerTint.ApplySelf(marker, _player);
-
-            IconOutline.Attach(
-                marker,
-                _player,
-                outlineTexture: useCharacter ? CharacterArt.IconOutlineOrNull(_player) : null,
-                fallbackTexture: marker.Texture,
-                _player.Character.MapDrawingColor);
+            if (PlayerTint.UseCharacterIconOnMap)
+            {
+                ShowVoteIconPreview(marker, _player);
+            }
+            else
+            {
+                ShowMapPin(marker, _player);
+            }
 
             return true;
         }
@@ -127,5 +124,76 @@ public static class MapMarkerTintPatch
             MainFile.Logger.Error($"MapMarkerTintPatch failed: {e}");
             return false;
         }
+    }
+
+    /// <summary>The normal solo pin: the character's map marker art, with an outline grown from it.</summary>
+    private static void ShowMapPin(NMapMarker marker, Player player)
+    {
+        var preview = marker.GetNodeOrNull<TextureRect>(PreviewNodeName);
+        if (preview != null)
+        {
+            preview.Visible = false;
+        }
+
+        marker.Texture = player.Character.MapMarker;
+        IconOutline.SetBuiltOutlineVisible(marker, true);
+
+        PlayerTint.ApplySelf(marker, player);
+        IconOutline.Attach(
+            marker,
+            player,
+            outlineTexture: null,
+            fallbackTexture: marker.Texture,
+            player.Character.MapDrawingColor);
+    }
+
+    /// <summary>
+    /// The co-op look, previewed solo — built from the real vote-icon scene rather than imitated.
+    /// </summary>
+    /// <remarks>
+    /// Instantiating <c>ui/multiplayer_vote_icon</c> and assigning the same two textures is exactly what
+    /// <c>NMultiplayerVoteContainer.RefreshPlayerVotes</c> does, and it then goes through the same
+    /// <see cref="IconOutline.Track" /> call the real vote icons do. So the head, its shipped outline
+    /// silhouette, the expand and stretch modes and the draw order are the scene's own, not a reproduction
+    /// that could drift from it.
+    ///
+    /// What still differs is placement, and cannot be otherwise: in co-op these sit in a row beneath a map
+    /// point, one per voting player, while this rides the single-player marker as it hops between nodes.
+    /// The icon itself renders identically; where it sits does not.
+    ///
+    /// The marker's own art is cleared while this is up, and the outline built for it hidden, so only the
+    /// vote icon draws.
+    /// </remarks>
+    private static void ShowVoteIconPreview(NMapMarker marker, Player player)
+    {
+        var preview = marker.GetNodeOrNull<TextureRect>(PreviewNodeName);
+        if (preview == null)
+        {
+            preview = SceneHelper.Instantiate<TextureRect>("ui/multiplayer_vote_icon");
+            preview.Name = PreviewNodeName;
+            marker.AddChild(preview);
+
+            // Centred at the scene's own 24x24 rather than stretched to the 40x40 marker, so it renders
+            // at the size a real vote icon does.
+            preview.Size = preview.CustomMinimumSize;
+            preview.SetAnchorsPreset(Control.LayoutPreset.Center);
+        }
+
+        preview.Visible = true;
+        marker.Texture = null;
+        IconOutline.SetBuiltOutlineVisible(marker, false);
+
+        // The same two assignments RefreshPlayerVotes makes.
+        preview.Texture = player.Character.IconTexture;
+        preview.GetNode<TextureRect>("Outline").Texture = player.Character.IconOutlineTexture;
+        preview.PivotOffset = preview.Size * 0.5f;
+
+        // And the same tint path the real vote icons take.
+        PlayerTint.ApplySelf(preview, player);
+        IconOutline.Track(
+            preview.GetNodeOrNull<TextureRect>("Outline"),
+            preview,
+            player,
+            player.Character.MapDrawingColor);
     }
 }

@@ -91,11 +91,17 @@ tint auto           # back to normal (only players sharing a character get tinte
 tint outline        # report icon outline thickness
 tint outline 5      # set it, in pixels (0-12, default 5; 0 hides the outline)
 tint icon           # report which art the solo map pin uses
-tint icon character # borrow the co-op head icon, to judge the multiplayer look solo
+tint icon character # show the real co-op vote icon, to judge the multiplayer look solo
 tint icon marker    # back to the normal solo pin
 tint diag           # what the mod has actually done, and recent outline activity
 tint diag on        # also write that activity to the game log
 ```
+
+`tint icon character` does not imitate the co-op icon — it instantiates the game's own
+`ui/multiplayer_vote_icon` scene and assigns the same two textures `NMultiplayerVoteContainer` does,
+then runs the identical tint path. The icon renders exactly as it does in co-op. Only its placement
+differs, unavoidably: in co-op these sit in a row under a map point, one per voting player, while
+this rides the solo marker as it hops between nodes.
 
 `tint diag` prints one line per live outline: the character's ink colour, the colour the outline
 *should* be carrying, the colour it is *actually* carrying, whether the two match, and whether the

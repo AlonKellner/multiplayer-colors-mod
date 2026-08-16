@@ -157,6 +157,19 @@ public static class IconOutline
     }
 
     /// <summary>
+    /// Shows or hides the outline this mod built on an icon, without disturbing its colour or geometry.
+    /// Used when a host swaps to art that carries its own outline instead.
+    /// </summary>
+    public static void SetBuiltOutlineVisible(TextureRect? icon, bool visible)
+    {
+        var outline = icon?.GetNodeOrNull<TextureRect>(NodeName);
+        if (outline != null)
+        {
+            outline.Visible = visible;
+        }
+    }
+
+    /// <summary>
     /// One line per live outline: what colour it should be carrying, what it is actually carrying, and
     /// whether the two agree. This is the check that the colour written is the colour that arrived.
     /// </summary>
