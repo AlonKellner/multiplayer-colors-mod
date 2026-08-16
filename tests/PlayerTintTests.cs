@@ -720,6 +720,26 @@ public class OutlineTests
         Assert.InRange(PlayerTint.FallbackOutlineScale, 1.03f, 1.15f);
     }
 
+    [Theory]
+    [InlineData(32f, 32f)]   // a measured container wins
+    [InlineData(40f, 40f)]
+    [InlineData(0f, PlayerTint.FallbackVoteIconSize)]    // nothing measured yet
+    [InlineData(0.5f, PlayerTint.FallbackVoteIconSize)]  // measured before layout ran
+    public void VoteIconPreviewMatchesTheContainerItWouldSitIn(float measured, float expected)
+    {
+        // A real vote icon is stretched to the height of the HBoxContainer holding it — 32px on every map
+        // point — not left at its own 24px minimum. Sizing the preview to the minimum made it visibly
+        // smaller than the co-op icon it is meant to be showing.
+        Assert.Equal(expected, PlayerTint.VoteIconPreviewSize(measured), 3);
+    }
+
+    [Fact]
+    public void TheVoteIconFallbackMatchesTheShippedMapPoints()
+    {
+        // All three map point scenes give their vote container a 32px height.
+        Assert.Equal(32f, PlayerTint.FallbackVoteIconSize, 3);
+    }
+
     [Fact]
     public void ThicknessDefaultsToFivePixels()
     {

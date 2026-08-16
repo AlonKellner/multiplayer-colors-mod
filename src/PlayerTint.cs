@@ -420,6 +420,24 @@ public static class PlayerTint
     /// </summary>
     public static bool UseCharacterIconOnMap { get; set; }
 
+    /// <summary>
+    /// The height every shipped map point gives its vote container, and therefore the size a vote icon is
+    /// stretched to. Used when no live container can be measured.
+    /// </summary>
+    public const float FallbackVoteIconSize = 32f;
+
+    /// <summary>
+    /// How large to draw the solo preview of a co-op vote icon: the height of a real vote container when one
+    /// can be measured, otherwise <see cref="FallbackVoteIconSize" />.
+    /// </summary>
+    /// <remarks>
+    /// Measured rather than assumed because the icon's own 24px minimum is not what it renders at — an
+    /// HBoxContainer stretches its children to fill, and the icon's proportional expand mode then matches
+    /// the width to that height.
+    /// </remarks>
+    public static float VoteIconPreviewSize(float measuredContainerHeight) =>
+        measuredContainerHeight > 1f ? measuredContainerHeight : FallbackVoteIconSize;
+
     public static float ClampThickness(float pixels) =>
         Mathf.Clamp(pixels, MinOutlineThickness, MaxOutlineThickness);
 

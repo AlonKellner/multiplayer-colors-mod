@@ -126,6 +126,29 @@ public static class MapMarkerTintPatch
         }
     }
 
+    /// <summary>
+    /// The size a real vote icon renders at, read off a live vote container when the map is open.
+    /// </summary>
+    /// <remarks>
+    /// Measured rather than hardcoded so it tracks the game: every map point currently gives its container a
+    /// 32px height, and an HBoxContainer stretches its children to fill it, so the icon's own 24px minimum
+    /// is never what it draws at. Sizing the preview to that minimum is what made it look too small.
+    /// </remarks>
+    private static float MeasureVoteIconSize()
+    {
+        try
+        {
+            var container = NMapScreen.Instance?._mapPointDictionary.Values
+                .FirstOrDefault()?.VoteContainer;
+
+            return PlayerTint.VoteIconPreviewSize(container?.Size.Y ?? 0f);
+        }
+        catch (Exception)
+        {
+            return PlayerTint.FallbackVoteIconSize;
+        }
+    }
+
     /// <summary>The normal solo pin: the character's map marker art, with an outline grown from it.</summary>
     private static void ShowMapPin(NMapMarker marker, Player player)
     {
@@ -172,12 +195,13 @@ public static class MapMarkerTintPatch
             preview = SceneHelper.Instantiate<TextureRect>("ui/multiplayer_vote_icon");
             preview.Name = PreviewNodeName;
             marker.AddChild(preview);
-
-            // Centred at the scene's own 24x24 rather than stretched to the 40x40 marker, so it renders
-            // at the size a real vote icon does.
-            preview.Size = preview.CustomMinimumSize;
-            preview.SetAnchorsPreset(Control.LayoutPreset.Center);
         }
+
+        // Re-sized every time, not just on creation, so it self-corrects once the map has laid out.
+        var size = MeasureVoteIconSize();
+        preview.CustomMinimumSize = new Vector2(size, size);
+        preview.Size = new Vector2(size, size);
+        preview.SetAnchorsPreset(Control.LayoutPreset.Center);
 
         preview.Visible = true;
         marker.Texture = null;
@@ -187,6 +211,8 @@ public static class MapMarkerTintPatch
         preview.Texture = player.Character.IconTexture;
         preview.GetNode<TextureRect>("Outline").Texture = player.Character.IconOutlineTexture;
         preview.PivotOffset = preview.Size * 0.5f;
+
+        Diagnostics.Log($"vote icon preview sized to {size}px for {player.Character?.Id}");
 
         // And the same tint path the real vote icons take.
         PlayerTint.ApplySelf(preview, player);
