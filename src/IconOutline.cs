@@ -142,6 +142,44 @@ public static class IconOutline
     }
 
     /// <summary>
+    /// One line per live outline: what colour it should be carrying, what it is actually carrying, and
+    /// whether the two agree. This is the check that the colour written is the colour that arrived.
+    /// </summary>
+    public static IReadOnlyList<string> Describe()
+    {
+        var lines = new List<string>();
+
+        foreach (var (outline, host) in Attached)
+        {
+            if (!GodotObject.IsInstanceValid(outline) || !GodotObject.IsInstanceValid(host.Icon))
+            {
+                continue;
+            }
+
+            var player = host.Player;
+            var variation = PlayerTint.For(player);
+            var expected = variation == null
+                ? PlayerTint.DormantOutline
+                : PlayerTint.OutlineInk(variation.Value, player.Character.MapDrawingColor, Alpha);
+
+            var actual = OutlineShader.ReadColor(outline);
+            var rgbMatches =
+                Mathf.IsEqualApprox(expected.R, actual.R)
+                && Mathf.IsEqualApprox(expected.G, actual.G)
+                && Mathf.IsEqualApprox(expected.B, actual.B);
+
+            lines.Add(
+                $"{host.Icon.Name}: ink=#{player.Character.MapDrawingColor.ToHtml(false)} "
+                + $"want=#{expected.ToHtml()} got=#{actual.ToHtml()} "
+                + $"rgb={(rgbMatches ? "MATCH" : "MISMATCH")} "
+                + $"shader={(OutlineShader.HasShader(outline) ? "yes" : "NO")} "
+                + $"visible={outline.Visible && outline.IsVisibleInTree()}");
+        }
+
+        return lines;
+    }
+
+    /// <summary>
     /// Re-applies the current thickness to every outline already on screen. Called after
     /// <c>tint outline</c> changes it, so the effect is visible without changing rooms.
     /// </summary>

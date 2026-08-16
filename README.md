@@ -94,6 +94,13 @@ tint diag           # what the mod has actually done, and recent outline activit
 tint diag on        # also write that activity to the game log
 ```
 
+`tint diag` prints one line per live outline: the character's ink colour, the colour the outline
+*should* be carrying, the colour it is *actually* carrying, whether the two match, and whether the
+silhouette shader is attached. If an outline ever looks wrong, that line says which half is at fault.
+
+```
+```
+
 The single-player map marker is outlined too, purely so this works solo — it is the only per-player map
 icon that exists outside co-op. Like everything else it stays dormant until a variation is active, which in
 single-player means until you force one here.

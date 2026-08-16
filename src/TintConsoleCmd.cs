@@ -150,6 +150,12 @@ public class TintConsoleCmd : AbstractConsoleCmd
             $"sprites tracked: {PlayerTint.TrackedCount}",
         };
 
+        var outlines = IconOutline.Describe();
+        lines.Add(outlines.Count == 0
+            ? "outlines live: none"
+            : $"outlines live: {outlines.Count}");
+        lines.AddRange(outlines.Select(l => "  " + l));
+
         var tail = Diagnostics.Tail();
         lines.Add(tail.Count == 0
             ? "no outline activity recorded yet — open the map, or enter a room with player icons"

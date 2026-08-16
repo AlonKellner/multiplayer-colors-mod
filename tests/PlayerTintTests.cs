@@ -727,7 +727,7 @@ public class OutlineTests
         var code = OutlineShader.Code;
 
         Assert.Contains("shader_type canvas_item", code);
-        Assert.Contains($"uniform vec4 {OutlineShader.ColorParameter}", code);
+        Assert.Contains($"uniform vec4 {OutlineShader.ColorParameter} =", code);
 
         // RGB comes from the uniform, alpha from what was already there.
         Assert.Contains($"{OutlineShader.ColorParameter}.rgb", code);
@@ -738,9 +738,16 @@ public class OutlineTests
     public void TheShaderParameterNameMatchesTheShaderSource()
     {
         // The C# side sets this by string; if the two drift the outline silently never changes colour.
-        Assert.Contains(
-            $"uniform vec4 {OutlineShader.ColorParameter} : source_color",
-            OutlineShader.Code);
+        Assert.Contains($"uniform vec4 {OutlineShader.ColorParameter} =", OutlineShader.Code);
+    }
+
+    [Fact]
+    public void TheColourUniformIsNotHintedAsASourceColour()
+    {
+        // A ": source_color" hint makes Godot colour-convert the uniform on upload, while Modulate — the
+        // thing this has to match — is passed through raw. With the hint the outline came out the right hue
+        // at the wrong shade, which is exactly the "does not match the map drawing color" report.
+        Assert.DoesNotContain("source_color", OutlineShader.Code);
     }
 
     [Theory]
