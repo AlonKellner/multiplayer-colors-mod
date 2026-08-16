@@ -82,6 +82,7 @@ public static class VoteIconTintPatch
 public static class MapMarkerTintPatch
 {
     private const string PreviewNodeName = "MultiplayerColorsVoteIconPreview";
+    private const string PreviewBoxName = "MultiplayerColorsVoteIconBox";
 
     private static WeakReference<NMapMarker>? _marker;
     private static Player? _player;
@@ -152,10 +153,10 @@ public static class MapMarkerTintPatch
     /// <summary>The normal solo pin: the character's map marker art, with an outline grown from it.</summary>
     private static void ShowMapPin(NMapMarker marker, Player player)
     {
-        var preview = marker.GetNodeOrNull<TextureRect>(PreviewNodeName);
-        if (preview != null)
+        var box = marker.GetNodeOrNull<HBoxContainer>(PreviewBoxName);
+        if (box != null)
         {
-            preview.Visible = false;
+            box.Visible = false;
         }
 
         marker.Texture = player.Character.MapMarker;
@@ -189,20 +190,43 @@ public static class MapMarkerTintPatch
     /// </remarks>
     private static void ShowVoteIconPreview(NMapMarker marker, Player player)
     {
-        var preview = marker.GetNodeOrNull<TextureRect>(PreviewNodeName);
+        // Lay it out the way the game does rather than sizing it by hand. A real vote icon is never drawn at
+        // its own minimum: an HBoxContainer stretches it to the container's height, and the icon's
+        // proportional expand mode then matches its width. Reproducing that with explicit sizes is what kept
+        // coming out wrong, so the preview goes in a box of the same height and Godot does the arithmetic.
+        var box = marker.GetNodeOrNull<HBoxContainer>(PreviewBoxName);
+        if (box == null)
+        {
+            // A plain HBoxContainer, not the scripted vote container: identical layout behaviour without
+            // running script that expects Initialize to have been called.
+            box = new HBoxContainer
+            {
+                Name = PreviewBoxName,
+                Alignment = BoxContainer.AlignmentMode.Center,
+                MouseFilter = Control.MouseFilterEnum.Ignore,
+            };
+            marker.AddChild(box);
+        }
+
+        // Anchored and offset explicitly rather than via a preset, whose resize behaviour differs between
+        // the anchors-only and anchors-and-offsets calls.
+        var height = MeasureVoteIconSize();
+        var width = height * 4f;
+        box.AnchorLeft = box.AnchorRight = box.AnchorTop = box.AnchorBottom = 0.5f;
+        box.OffsetLeft = -width / 2f;
+        box.OffsetRight = width / 2f;
+        box.OffsetTop = -height / 2f;
+        box.OffsetBottom = height / 2f;
+
+        var preview = box.GetNodeOrNull<TextureRect>(PreviewNodeName);
         if (preview == null)
         {
             preview = SceneHelper.Instantiate<TextureRect>("ui/multiplayer_vote_icon");
             preview.Name = PreviewNodeName;
-            marker.AddChild(preview);
+            box.AddChild(preview);
         }
 
-        // Re-sized every time, not just on creation, so it self-corrects once the map has laid out.
-        var size = MeasureVoteIconSize();
-        preview.CustomMinimumSize = new Vector2(size, size);
-        preview.Size = new Vector2(size, size);
-        preview.SetAnchorsPreset(Control.LayoutPreset.Center);
-
+        box.Visible = true;
         preview.Visible = true;
         marker.Texture = null;
         IconOutline.SetBuiltOutlineVisible(marker, false);
@@ -212,7 +236,9 @@ public static class MapMarkerTintPatch
         preview.GetNode<TextureRect>("Outline").Texture = player.Character.IconOutlineTexture;
         preview.PivotOffset = preview.Size * 0.5f;
 
-        Diagnostics.Log($"vote icon preview sized to {size}px for {player.Character?.Id}");
+        Diagnostics.Log(
+            $"vote icon preview: box={box.Size} icon={preview.Size} "
+            + $"measured={height}px for {player.Character?.Id}");
 
         // And the same tint path the real vote icons take.
         PlayerTint.ApplySelf(preview, player);

@@ -196,8 +196,14 @@ public static class IconOutline
                 && Mathf.IsEqualApprox(expected.G, actual.G)
                 && Mathf.IsEqualApprox(expected.B, actual.B);
 
+            // Size and global scale are what settle "is the solo preview the same size as the real thing":
+            // run this in a co-op game and the real vote icons report their true rendered size here.
+            var scale = host.Icon.GetGlobalTransform().Scale;
+
             lines.Add(
-                $"{host.Icon.Name}: ink=#{player.Character.MapDrawingColor.ToHtml(false)} "
+                $"{host.Icon.Name}: size={host.Icon.Size.X:F0}x{host.Icon.Size.Y:F0} "
+                + $"scale={scale.X:F2}x{scale.Y:F2} onscreen={host.Icon.Size.X * scale.X:F0}px "
+                + $"ink=#{player.Character.MapDrawingColor.ToHtml(false)} "
                 + $"want=#{expected.ToHtml()} got=#{actual.ToHtml()} "
                 + $"rgb={(rgbMatches ? "MATCH" : "MISMATCH")} "
                 + $"shader={(OutlineShader.HasShader(outline) ? "yes" : "NO")} "
