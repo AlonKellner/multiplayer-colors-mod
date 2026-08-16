@@ -21,6 +21,9 @@ public static class MainFile
 
     public static void Initialize()
     {
+        // Diagnostics record regardless; this is what makes them reach the game log.
+        Diagnostics.Sink = message => Logger.Info(message);
+
         Harmony harmony = new(ModId);
         harmony.PatchAll();
         Logger.Info($"{ModId} initialized.");

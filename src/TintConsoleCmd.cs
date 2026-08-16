@@ -202,6 +202,16 @@ public class TintConsoleCmd : AbstractConsoleCmd
             : "recent activity:");
         lines.AddRange(tail.Select(l => "  " + l));
 
+        // Always written to the game log as well as returned. A diagnostic you have to transcribe out of
+        // the console by hand is no use to anyone.
+        Diagnostics.Write("---- tint diag ----");
+        foreach (var line in lines)
+        {
+            Diagnostics.Write(line);
+        }
+
+        lines.Add("(this report was also written to the game log)");
+
         return new CmdResult(success: true, string.Join("\n", lines));
     }
 

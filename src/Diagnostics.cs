@@ -1,17 +1,21 @@
 namespace MultiplayerColors;
 
 /// <summary>
-/// Diagnostic logging for the parts of this mod that cannot be unit tested — everything that touches a
-/// Godot node. Off by default; switched on with <c>tint diag on</c>.
+/// Diagnostic recording for the parts of this mod that cannot be unit tested — everything that touches a
+/// Godot node.
 /// </summary>
 /// <remarks>
-/// Deliberately routed through here rather than calling the logger directly, so that no type the test suite
-/// touches ever references <c>MainFile</c>. Instantiating the game's logger drags in Godot statics that take
-/// the bare xUnit host down with them.
+/// Writes go through <see cref="Sink" />, which <c>MainFile</c> points at the game logger on startup. The
+/// indirection is not decoration: instantiating that logger drags in Godot statics that take the bare xUnit
+/// host down with it, and the console command these back is exercised by tests. With no sink installed —
+/// which is exactly the test case — recording still happens and nothing is written anywhere.
 /// </remarks>
 public static class Diagnostics
 {
-    /// <summary>Whether to write diagnostic lines to the game log.</summary>
+    /// <summary>Where diagnostic lines go. Left null outside the game.</summary>
+    public static Action<string>? Sink { get; set; }
+
+    /// <summary>Whether routine activity is written as it happens. Reports are written either way.</summary>
     public static bool Enabled { get; set; }
 
     /// <summary>The most recent lines, newest last, for reporting back through the console command.</summary>
@@ -19,6 +23,7 @@ public static class Diagnostics
 
     private const int MaxRecent = 20;
 
+    /// <summary>Records activity, and writes it out only when logging has been switched on.</summary>
     public static void Log(string message)
     {
         lock (Recent)
@@ -32,20 +37,23 @@ public static class Diagnostics
 
         if (Enabled)
         {
-            MainFile.Logger.Info(message);
+            Write(message);
         }
     }
 
+    /// <summary>Writes a line out regardless of whether logging is switched on.</summary>
+    public static void Write(string message) => Sink?.Invoke(message);
+
     /// <summary>
-    /// Writes everything recorded so far to the game log, for when logging is switched on after the
-    /// interesting thing already happened. Returns how many lines were written.
+    /// Writes everything recorded so far, for when logging is switched on after the interesting thing
+    /// already happened. Returns how many lines were written.
     /// </summary>
     public static int FlushToLog()
     {
         var lines = Tail();
         foreach (var line in lines)
         {
-            MainFile.Logger.Info("(earlier) " + line);
+            Write("(earlier) " + line);
         }
 
         return lines.Count;

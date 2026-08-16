@@ -93,8 +93,8 @@ tint outline 5      # set it, in pixels (0-12, default 5; 0 hides the outline)
 tint icon           # report which art the solo map pin uses
 tint icon character # show the real co-op vote icon, to judge the multiplayer look solo
 tint icon marker    # back to the normal solo pin
-tint diag           # what the mod has actually done, and recent outline activity
-tint diag on        # also write that activity to the game log
+tint diag           # what the mod has done, plus every icon's size, colour and outline state
+tint diag on        # also log routine activity as it happens
 ```
 
 `tint icon character` does not imitate the co-op icon — it instantiates the game's own
@@ -103,7 +103,8 @@ then runs the identical tint path. The icon renders exactly as it does in co-op.
 differs, unavoidably: in co-op these sit in a row under a map point, one per voting player, while
 this rides the solo marker as it hops between nodes.
 
-`tint diag` prints one line per live outline: the character's ink colour, the colour the outline
+`tint diag` always writes its report to the game log as well as the console, so there is never
+anything to transcribe by hand. It prints one line per live outline: the character's ink colour, the colour the outline
 *should* be carrying, the colour it is *actually* carrying, whether the two match, and whether the
 silhouette shader is attached. If an outline ever looks wrong, that line says which half is at fault.
 
