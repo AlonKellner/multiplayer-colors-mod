@@ -365,9 +365,34 @@ public static class PlayerTint
     /// </remarks>
     public static Color OutlineInk(PlayerVariation variation, Color baseInk, float alpha)
     {
-        var ink = MapInkFor(variation, baseInk);
+        var ink = AsRendered(MapInkFor(variation, baseInk));
         return new Color(ink.R, ink.G, ink.B, alpha);
     }
+
+    /// <summary>
+    /// What the game's brush actually puts on the map for a given ink colour.
+    /// </summary>
+    /// <remarks>
+    /// Map lines never draw the colour they are assigned. The brush texture
+    /// <c>res://images/packed/vfx/trail2.png</c> is a 90% grey, not white, and Godot multiplies the texture
+    /// into <c>COLOR</c> before the line's shader runs — so a stroke lands about a tenth darker than the
+    /// value handed to it. The game's own shader assumes otherwise, commenting "Texture is grayscale so no
+    /// need to modify RGB" while only touching alpha.
+    ///
+    /// Verified end to end: a line assigned #3a8033 reads back from the drawing viewport as #35722e, and
+    /// this predicts #34722e — one bit of rounding apart. Without it the outline is reliably the brighter of
+    /// the two, which is exactly what "the colours are slightly different" was.
+    /// </remarks>
+    public static Color AsRendered(Color ink) => new(
+        ink.R * InkRenderTint.R,
+        ink.G * InkRenderTint.G,
+        ink.B * InkRenderTint.B,
+        ink.A);
+
+    /// <summary>
+    /// The brush texture's colour at full opacity, measured from every opaque pixel of trail2.png.
+    /// </summary>
+    public static readonly Color InkRenderTint = new(0.9020f, 0.8892f, 0.9020f);
 
     /// <summary>
     /// The outline colour for a player, or <c>null</c> when they have no variation — in which case the

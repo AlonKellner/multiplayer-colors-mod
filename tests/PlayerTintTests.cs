@@ -631,13 +631,52 @@ public class OutlineTests
 
         foreach (PlayerVariation v in Enum.GetValues<PlayerVariation>())
         {
+            // Against the ink AS IT RENDERS, not as it is assigned. The game's brush texture is a 90% grey
+            // rather than white, and Godot multiplies it into the line's colour, so a stroke always draws
+            // about a tenth darker than the value handed to it. Matching the assigned value made the outline
+            // reliably too bright.
             var pen = PlayerTint.MapInkFor(v, ink);
+            var rendered = PlayerTint.AsRendered(pen);
             var outline = PlayerTint.OutlineInk(v, ink, SceneAlpha);
 
-            Assert.Equal(pen.R, outline.R, 4);
-            Assert.Equal(pen.G, outline.G, 4);
-            Assert.Equal(pen.B, outline.B, 4);
+            Assert.Equal(rendered.R, outline.R, 4);
+            Assert.Equal(rendered.G, outline.G, 4);
+            Assert.Equal(rendered.B, outline.B, 4);
         }
+    }
+
+    [Fact]
+    public void TheRenderTintMatchesTheMeasuredBrush()
+    {
+        // Measured off res://images/packed/vfx/trail2.png: every fully-opaque pixel is exactly
+        // (0.9020, 0.8892, 0.9020). Pinned so a future guess cannot quietly replace a measurement.
+        Assert.Equal(0.9020f, PlayerTint.InkRenderTint.R, 4);
+        Assert.Equal(0.8892f, PlayerTint.InkRenderTint.G, 4);
+        Assert.Equal(0.9020f, PlayerTint.InkRenderTint.B, 4);
+    }
+
+    [Fact]
+    public void AsRenderedReproducesTheColourMeasuredOnScreen()
+    {
+        // The exact case from the diag: a line assigned #3a8033 read back from the drawing viewport as
+        // #35722e. This predicts #34722e — one 8-bit step apart, which is rounding in the render pipeline,
+        // not a modelling error. Asserting the predicted value rather than the observed one, since that is
+        // what this function can actually promise.
+        var rendered = PlayerTint.AsRendered(new Color("3a8033"));
+
+        Assert.Equal("34722e", rendered.ToHtml(false));
+
+        // And within one step of what was measured on screen.
+        var measured = new Color("35722e");
+        Assert.True(Math.Abs(rendered.R - measured.R) <= 1f / 255f);
+        Assert.True(Math.Abs(rendered.G - measured.G) <= 1f / 255f);
+        Assert.True(Math.Abs(rendered.B - measured.B) <= 1f / 255f);
+    }
+
+    [Fact]
+    public void AsRenderedLeavesAlphaAlone()
+    {
+        Assert.Equal(0.5f, PlayerTint.AsRendered(new Color(0.5f, 0.5f, 0.5f, 0.5f)).A, 4);
     }
 
     [Fact]
