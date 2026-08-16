@@ -718,6 +718,36 @@ public static class PlayerTint
     /// to walk — but they are all recreated per stroke / per ping / per turn, so they pick the override up
     /// on their own the next time they're drawn.
     /// </remarks>
+    /// <summary>
+    /// The colour <see cref="Repaint" /> would write to this node right now, or null if it is not tracked.
+    /// </summary>
+    /// <remarks>
+    /// Exists so <c>tint diag</c> asks the painter rather than re-deriving the answer. The first version
+    /// re-derived it and got it wrong for the game's own vote-icon outline: that one reverts to the black
+    /// its scene gave it, not to the transparent an outline this mod built reverts to, so the report cried
+    /// mismatch on nodes that were perfectly correct.
+    /// </remarks>
+    public static Color? ExpectedColorFor(CanvasItem node)
+    {
+        if (!Tinted.TryGetValue(node, out var entry))
+        {
+            return null;
+        }
+
+        var variation = For(entry.Player);
+
+        if (entry.Kind == TintKind.Outline)
+        {
+            return variation == null
+                ? entry.BaseModulate
+                : OutlineInk(variation.Value, entry.BaseInk, entry.ActiveAlpha);
+        }
+
+        return variation == null
+            ? entry.BaseModulate
+            : Combine(entry.BaseModulate, Modulate(variation.Value));
+    }
+
     /// <summary>How many nodes this mod is currently tracking. Reported by <c>tint diag</c>.</summary>
     public static int TrackedCount
     {

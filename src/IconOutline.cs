@@ -185,16 +185,14 @@ public static class IconOutline
             }
 
             var player = host.Player;
-            var variation = PlayerTint.For(player);
-            var expected = variation == null
-                ? PlayerTint.DormantOutline
-                : PlayerTint.OutlineInk(variation.Value, player.Character.MapDrawingColor, Alpha);
+            var expected = PlayerTint.ExpectedColorFor(outline) ?? PlayerTint.DormantOutline;
 
             var actual = OutlineShader.ReadColor(outline);
-            var rgbMatches =
+            var matches =
                 Mathf.IsEqualApprox(expected.R, actual.R)
                 && Mathf.IsEqualApprox(expected.G, actual.G)
-                && Mathf.IsEqualApprox(expected.B, actual.B);
+                && Mathf.IsEqualApprox(expected.B, actual.B)
+                && Mathf.IsEqualApprox(expected.A, actual.A);
 
             // Size and global scale are what settle "is the solo preview the same size as the real thing":
             // run this in a co-op game and the real vote icons report their true rendered size here.
@@ -205,7 +203,7 @@ public static class IconOutline
                 + $"scale={scale.X:F2}x{scale.Y:F2} onscreen={host.Icon.Size.X * scale.X:F0}px "
                 + $"ink=#{player.Character.MapDrawingColor.ToHtml(false)} "
                 + $"want=#{expected.ToHtml()} got=#{actual.ToHtml()} "
-                + $"rgb={(rgbMatches ? "MATCH" : "MISMATCH")} "
+                + $"{(matches ? "MATCH" : "MISMATCH")} "
                 + $"shader={(OutlineShader.HasShader(outline) ? "yes" : "NO")} "
                 + $"visible={outline.Visible && outline.IsVisibleInTree()}");
         }
