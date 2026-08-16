@@ -22,8 +22,17 @@ public static class IconOutline
 {
     private const string NodeName = "MultiplayerColorsOutline";
 
-    /// <summary>Matches the alpha the game uses on the vote icons' outline.</summary>
-    public const float Alpha = 0.7529412f;
+    /// <summary>
+    /// How opaque an active outline is drawn. Fully opaque: the point of the outline is to be read at a
+    /// glance as a colour key, and any extra transparency only muddies it against the map.
+    /// </summary>
+    /// <remarks>
+    /// This is not the silhouette's shape. The shader multiplies by the texture's own alpha, so the outline
+    /// still traces the character exactly and still keeps its antialiased edge — this only removes the
+    /// additional dimming the game applies to its own vote-icon outline. That vanilla 75% is still what a
+    /// dormant outline reverts to; it just is not what an active one wears.
+    /// </remarks>
+    public const float Alpha = 1f;
 
     /// <summary>
     /// Outlines this mod created, with the icon each belongs to, so thickness changes can be re-applied to

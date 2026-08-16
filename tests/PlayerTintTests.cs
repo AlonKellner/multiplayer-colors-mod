@@ -654,6 +654,15 @@ public class OutlineTests
     }
 
     [Fact]
+    public void OutlinesAreDrawnFullyOpaque()
+    {
+        // No extra dimming: the outline is a colour key and has to read at a glance. This is not the
+        // silhouette's shape — the shader multiplies by the texture's own alpha, so the outline still traces
+        // the character and still keeps its antialiased edge.
+        Assert.Equal(1f, IconOutline.Alpha, 4);
+    }
+
+    [Fact]
     public void OutlineInkIsOpaqueWhenAskedToBe()
     {
         Assert.Equal(1f, PlayerTint.OutlineInk(PlayerVariation.Warmer, new Color("CB282B"), 1f).A, 4);

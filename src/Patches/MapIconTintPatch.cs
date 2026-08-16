@@ -18,8 +18,8 @@ namespace MultiplayerColors.Patches;
 ///
 /// The scene is two nodes: the head, and an "Outline" child drawn behind it via <c>show_behind_parent</c>.
 /// That outline art is the icon's own silhouette dilated a few pixels, pure white with the shape carried
-/// entirely in alpha — so a single <c>Modulate</c> recolours an exact, shape-following outline with no
-/// shader and no new art. The scene tints it black at 75% alpha; we swap the colour and keep the alpha.
+/// entirely in alpha. The scene draws it black at 75% alpha; an active outline takes the player's colour at
+/// full opacity instead, and reverts to that vanilla black when nothing is tinted.
 ///
 /// This one scene is instanced by nine hosts — the three map point types, the treasure-room skip vote, both
 /// relic holders, both event option buttons, and the combat end-turn button — so the key appears on all of
