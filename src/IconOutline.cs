@@ -37,15 +37,41 @@ public static class IconOutline
     /// Registers an outline the game already ships — the multiplayer vote icon's — so that thickness reaches
     /// it too. Its colour is handled by the caller; only geometry is managed here.
     /// </summary>
-    public static void Track(TextureRect? outline, TextureRect? icon, Player? player)
+    public static void Track(TextureRect? outline, TextureRect? icon, Player? player, Color baseInk)
     {
         if (outline == null || icon == null || player == null)
         {
             return;
         }
 
+        // First adoption only: capture the colour the scene gave it, before the shader takes over, so
+        // there is something vanilla to revert to.
+        var firstTime = !Attached.TryGetValue(outline, out _);
+        var dormant = firstTime ? outline.Modulate : PlayerTint.DormantOutline;
+
         Attached.AddOrUpdate(outline, new OutlineHost(icon, player));
+
+        if (firstTime)
+        {
+            InstallShader(outline);
+        }
+
         ApplyThickness(outline, player);
+        PlayerTint.ApplyOutline(outline, player, baseInk, Alpha, dormant);
+    }
+
+    /// <summary>
+    /// Swaps the node onto the silhouette shader and neutralises its own modulate.
+    /// </summary>
+    /// <remarks>
+    /// Modulate is left white deliberately: the colour now lives in a shader uniform, and keeping modulate
+    /// neutral means an ancestor's fade still multiplies through untouched — which is what keeps the
+    /// multiplayer vote icons fading in and out with their head.
+    /// </remarks>
+    private static void InstallShader(TextureRect outline)
+    {
+        outline.Material = OutlineShader.CreateMaterial();
+        outline.Modulate = Colors.White;
     }
 
     /// <summary>
@@ -72,7 +98,7 @@ public static class IconOutline
         if (existing != null)
         {
             ApplyThickness(existing, player);
-            PlayerTint.ApplyOutline(existing, player, baseInk, Alpha);
+            PlayerTint.ApplyOutline(existing, player, baseInk, Alpha, PlayerTint.DormantOutline);
             return;
         }
 
@@ -95,8 +121,6 @@ public static class IconOutline
             ExpandMode = icon.ExpandMode,
             StretchMode = icon.StretchMode,
 
-            // Born invisible so ApplyOutline records "transparent" as the colour to revert to.
-            Modulate = PlayerTint.DormantOutline,
         };
 
         outline.SetAnchorsPreset(Control.LayoutPreset.FullRect);
@@ -105,8 +129,11 @@ public static class IconOutline
         icon.MoveChild(outline, 0);
         Attached.AddOrUpdate(outline, new OutlineHost(icon, player));
 
+        InstallShader(outline);
         ApplyThickness(outline, player);
-        PlayerTint.ApplyOutline(outline, player, baseInk, Alpha);
+
+        // Dormant means invisible: outlines this mod created did not exist in the vanilla game.
+        PlayerTint.ApplyOutline(outline, player, baseInk, Alpha, PlayerTint.DormantOutline);
 
         Diagnostics.Log(
             $"outline attached to {icon.Name} for {player.Character?.Id} "

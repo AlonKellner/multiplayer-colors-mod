@@ -12,7 +12,7 @@ The base game already does this for monsters: `NCombatRoom.RandomizeEnemyScalesA
 and hue of duplicate monsters so you can tell three Jaw Worms apart. It explicitly skips players. This mod
 is the players' half of that idea.
 
-When N players share a character, each gets one of four variations, assigned by ascending run slot index:
+When N players share a character, each gets one of four variations, assigned by ascending network id:
 
 | Ordinal | Variation |
 |---|---|
@@ -44,11 +44,13 @@ so it holds for art this mod has never seen.
 
 ## Determinism
 
-Colours are a pure function of `(character, slot index, run roster)` — no RNG, no dependence on the local
-player, and never on node or display order. Several of the game's UIs deliberately reorder the roster so the
-local player comes first, so a colour keyed on display position would come out differently on every client.
-Keying on `RunState.GetPlayerSlotIndex` — the game's own network-authoritative ordinal — means all four
-players see the same person in the same colour.
+Colours are a pure function of `(character, network id, run roster)` — no RNG, no dependence on the local
+player, and never on node, list or display order.
+
+Ordering is by `Player.NetId`, a network identity that is the same value on every client *by construction*.
+It deliberately does not use `RunState.GetPlayerSlotIndex`: that list is populated once from the lobby and
+looks stable, but its order is consistent only by convention, and if it ever differed the whole lobby would
+disagree about who is which colour. Nothing about a colour assignment needs to depend on list position.
 
 ## Mod support
 
@@ -87,7 +89,7 @@ tint off            # no tint at all
 tint auto           # back to normal (only players sharing a character get tinted)
 
 tint outline        # report icon outline thickness
-tint outline 5      # set it, in pixels (0-12; 0 hides the outline)
+tint outline 5      # set it, in pixels (0-12, default 5; 0 hides the outline)
 tint diag           # what the mod has actually done, and recent outline activity
 tint diag on        # also write that activity to the game log
 ```

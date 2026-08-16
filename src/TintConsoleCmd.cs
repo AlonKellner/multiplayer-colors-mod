@@ -131,7 +131,15 @@ public class TintConsoleCmd : AbstractConsoleCmd
             }
 
             Diagnostics.Enabled = toggle == "on";
-            return new CmdResult(success: true, $"tint diag: logging {toggle}.");
+
+            // Outlines attach when a screen is built, which is almost always before anyone thinks to turn
+            // logging on — so flush what already happened rather than making them reproduce it.
+            var flushed = Diagnostics.Enabled ? Diagnostics.FlushToLog() : 0;
+
+            return new CmdResult(
+                success: true,
+                $"tint diag: logging {toggle}."
+                + (flushed > 0 ? $" Wrote {flushed} earlier line(s) to the log." : string.Empty));
         }
 
         var lines = new List<string>

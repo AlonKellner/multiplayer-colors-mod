@@ -289,15 +289,17 @@ public static class PlayerTint
     /// with everything else — and so <c>tint auto</c> restores the vanilla outline colour instead of leaving
     /// the last forced one behind.
     /// </remarks>
-    public static void ApplyOutline(CanvasItem? node, Player? player, Color baseInk, float activeAlpha) =>
-        Apply(node, player, TintKind.Outline, baseInk, activeAlpha);
+    /// <param name="dormant">The colour to wear while the player has no variation.</param>
+    public static void ApplyOutline(CanvasItem? node, Player? player, Color baseInk, float activeAlpha, Color dormant) =>
+        Apply(node, player, TintKind.Outline, baseInk, activeAlpha, dormant);
 
     private static void Apply(
         CanvasItem? node,
         Player? player,
         TintKind kind,
         Color baseInk = default,
-        float activeAlpha = 1f)
+        float activeAlpha = 1f,
+        Color? dormant = null)
     {
         if (node == null || player == null)
         {
@@ -310,7 +312,15 @@ public static class PlayerTint
         }
         else
         {
-            var baseColour = kind == TintKind.SelfModulate ? node.SelfModulate : node.Modulate;
+            // An outline's dormant colour is passed in rather than read off the node: it lives in a shader
+            // uniform, and the node's own modulate is left white so ancestor fades still come through.
+            var baseColour = kind switch
+            {
+                TintKind.SelfModulate => node.SelfModulate,
+                TintKind.Outline => dormant ?? DormantOutline,
+                _ => node.Modulate,
+            };
+
             entry = new TintedNode(baseColour, player, kind, baseInk, activeAlpha);
             Tinted.Add(node, entry);
         }
@@ -397,7 +407,7 @@ public static class PlayerTint
     /// <summary>How far an outline extends past its icon, in pixels. Tunable live via <c>tint outline</c>.</summary>
     public static float OutlineThickness { get; set; } = DefaultOutlineThickness;
 
-    public const float DefaultOutlineThickness = 3f;
+    public const float DefaultOutlineThickness = 5f;
 
     /// <summary>Zero is allowed — it is how you turn outlines off without turning the tint off.</summary>
     public const float MinOutlineThickness = 0f;
@@ -654,9 +664,11 @@ public static class PlayerTint
         {
             // Reverts to the vanilla outline colour when the variation goes away — which is what makes
             // `tint auto` put a solo map marker back to normal.
-            node.Modulate = variation == null
-                ? entry.BaseModulate
-                : OutlineInk(variation.Value, entry.BaseInk, entry.ActiveAlpha);
+            OutlineShader.SetColor(
+                node,
+                variation == null
+                    ? entry.BaseModulate
+                    : OutlineInk(variation.Value, entry.BaseInk, entry.ActiveAlpha));
             return;
         }
 

@@ -36,6 +36,21 @@ public static class Diagnostics
         }
     }
 
+    /// <summary>
+    /// Writes everything recorded so far to the game log, for when logging is switched on after the
+    /// interesting thing already happened. Returns how many lines were written.
+    /// </summary>
+    public static int FlushToLog()
+    {
+        var lines = Tail();
+        foreach (var line in lines)
+        {
+            MainFile.Logger.Info("(earlier) " + line);
+        }
+
+        return lines.Count;
+    }
+
     /// <summary>The recent lines, oldest first. Empty when nothing has happened yet.</summary>
     public static IReadOnlyList<string> Tail()
     {

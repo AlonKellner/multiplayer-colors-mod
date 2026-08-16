@@ -712,9 +712,35 @@ public class OutlineTests
     }
 
     [Fact]
-    public void ThicknessDefaultsToSomethingVisible()
+    public void ThicknessDefaultsToFivePixels()
     {
-        Assert.InRange(PlayerTint.DefaultOutlineThickness, 1f, 6f);
+        Assert.Equal(5f, PlayerTint.DefaultOutlineThickness, 3);
+    }
+
+    [Fact]
+    public void TheShaderReplacesColourAndKeepsAlpha()
+    {
+        // Modulate multiplies, so it can only tint art — it cannot flatten a full-colour icon into a solid
+        // silhouette, which is why the grown-icon fallback came out as "the same icon but larger". The
+        // shader assigns RGB outright and carries alpha through, which is the only way to get a silhouette
+        // out of arbitrary character art.
+        var code = OutlineShader.Code;
+
+        Assert.Contains("shader_type canvas_item", code);
+        Assert.Contains($"uniform vec4 {OutlineShader.ColorParameter}", code);
+
+        // RGB comes from the uniform, alpha from what was already there.
+        Assert.Contains($"{OutlineShader.ColorParameter}.rgb", code);
+        Assert.Contains("COLOR.a", code);
+    }
+
+    [Fact]
+    public void TheShaderParameterNameMatchesTheShaderSource()
+    {
+        // The C# side sets this by string; if the two drift the outline silently never changes colour.
+        Assert.Contains(
+            $"uniform vec4 {OutlineShader.ColorParameter} : source_color",
+            OutlineShader.Code);
     }
 
     [Theory]
