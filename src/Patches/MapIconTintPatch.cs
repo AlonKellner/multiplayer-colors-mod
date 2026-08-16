@@ -80,23 +80,52 @@ public static class VoteIconTintPatch
 [HarmonyPatch(typeof(NMapMarker), nameof(NMapMarker.Initialize))]
 public static class MapMarkerTintPatch
 {
+    private static WeakReference<NMapMarker>? _marker;
+    private static Player? _player;
+
     [HarmonyPostfix]
     public static void Postfix(NMapMarker __instance, Player player)
     {
+        _marker = new WeakReference<NMapMarker>(__instance);
+        _player = player;
+        Apply();
+    }
+
+    /// <summary>
+    /// Re-applies art and colour to the live marker. Returns false when there is no marker on screen —
+    /// which is the normal case outside the map screen, and in co-op, where the marker never shows.
+    /// </summary>
+    public static bool Apply()
+    {
         try
         {
-            PlayerTint.ApplySelf(__instance, player);
+            if (_marker == null || !_marker.TryGetTarget(out var marker)
+                || !GodotObject.IsInstanceValid(marker) || _player == null)
+            {
+                return false;
+            }
+
+            // `tint icon character` swaps the marker's own art for the head icon the multiplayer vote
+            // pins use, so the co-op look can be judged without a second player. The shipped outline
+            // silhouette only exists for that head art; the marker art has none, so it grows its own.
+            var useCharacter = PlayerTint.UseCharacterIconOnMap;
+            marker.Texture = useCharacter ? _player.Character.IconTexture : _player.Character.MapMarker;
+
+            PlayerTint.ApplySelf(marker, _player);
 
             IconOutline.Attach(
-                __instance,
-                player,
-                outlineTexture: null,
-                fallbackTexture: player.Character.MapMarker,
-                player.Character.MapDrawingColor);
+                marker,
+                _player,
+                outlineTexture: useCharacter ? CharacterArt.IconOutlineOrNull(_player) : null,
+                fallbackTexture: marker.Texture,
+                _player.Character.MapDrawingColor);
+
+            return true;
         }
         catch (Exception e)
         {
             MainFile.Logger.Error($"MapMarkerTintPatch failed: {e}");
+            return false;
         }
     }
 }

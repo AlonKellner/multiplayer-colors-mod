@@ -90,6 +90,9 @@ tint auto           # back to normal (only players sharing a character get tinte
 
 tint outline        # report icon outline thickness
 tint outline 5      # set it, in pixels (0-12, default 5; 0 hides the outline)
+tint icon           # report which art the solo map pin uses
+tint icon character # borrow the co-op head icon, to judge the multiplayer look solo
+tint icon marker    # back to the normal solo pin
 tint diag           # what the mod has actually done, and recent outline activity
 tint diag on        # also write that activity to the game log
 ```

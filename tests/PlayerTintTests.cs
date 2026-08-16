@@ -750,6 +750,57 @@ public class OutlineTests
         Assert.Contains($"uniform vec4 {OutlineShader.ColorParameter} =", OutlineShader.Code);
     }
 
+    [Theory]
+    [InlineData(new[] { 0.2f, 0.5f, 0.9f }, 0.2f, 0.9f)]
+    [InlineData(new[] { 0f, 1f }, 0f, 1f)]
+    [InlineData(new[] { 0.4f }, 0.4f, 0.4f)]
+    public void AlphaRangeIsTheMinimumAndMaximumPresent(float[] alphas, float min, float max)
+    {
+        var range = OutlineShader.AlphaRange(alphas);
+
+        Assert.Equal(min, range.Min, 4);
+        Assert.Equal(max, range.Max, 4);
+    }
+
+    [Fact]
+    public void AlphaRangeOfNothingIsTheIdentityRange()
+    {
+        // No pixels to measure means no rescaling — 0..1 leaves the texture exactly as it is.
+        var range = OutlineShader.AlphaRange([]);
+
+        Assert.Equal(0f, range.Min, 4);
+        Assert.Equal(1f, range.Max, 4);
+    }
+
+    [Theory]
+    [InlineData(0.2f, 0.2f, 0.9f, 0f)]      // the least opaque pixel becomes fully transparent
+    [InlineData(0.9f, 0.2f, 0.9f, 1f)]      // the most opaque pixel becomes fully blocking
+    [InlineData(0.55f, 0.2f, 0.9f, 0.5f)]   // and the midpoint lands halfway
+    [InlineData(0.5f, 0.4f, 0.4f, 0.5f)]    // a flat texture is left alone rather than divided by zero
+    public void NormalisingAlphaStretchesTheRangeToFillZeroToOne(
+        float raw, float min, float max, float expected)
+    {
+        Assert.Equal(expected, OutlineShader.NormalizeAlpha(raw, min, max), 4);
+    }
+
+    [Fact]
+    public void NormalisedAlphaNeverLeavesZeroToOne()
+    {
+        // Values outside the measured range can only come from a texture whose range was measured
+        // elsewhere, but clamping costs nothing and a negative alpha would render as garbage.
+        Assert.Equal(0f, OutlineShader.NormalizeAlpha(0.1f, 0.2f, 0.9f), 4);
+        Assert.Equal(1f, OutlineShader.NormalizeAlpha(1f, 0.2f, 0.9f), 4);
+    }
+
+    [Fact]
+    public void TheShaderNormalisesAlphaWithUniformsTheCSharpCanSet()
+    {
+        var code = OutlineShader.Code;
+
+        Assert.Contains($"uniform float {OutlineShader.MinAlphaParameter}", code);
+        Assert.Contains($"uniform float {OutlineShader.MaxAlphaParameter}", code);
+    }
+
     [Fact]
     public void TheColourUniformIsNotHintedAsASourceColour()
     {

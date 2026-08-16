@@ -1,6 +1,7 @@
 using MegaCrit.Sts2.Core.DevConsole;
 using MegaCrit.Sts2.Core.DevConsole.ConsoleCommands;
 using MegaCrit.Sts2.Core.Entities.Players;
+using MultiplayerColors.Patches;
 
 namespace MultiplayerColors;
 
@@ -34,12 +35,13 @@ public class TintConsoleCmd : AbstractConsoleCmd
 
     public override string CmdName => "tint";
 
-    public override string Args => "[" + string.Join("|", Options.Select(o => o.Name)) + "|outline <px>|diag]";
+    public override string Args => "[" + string.Join("|", Options.Select(o => o.Name)) + "|outline <px>|icon <marker|character>|diag]";
 
     public override string Description =>
         "Multiplayer Colors: forces a player colour variation on yourself for testing, instead of only "
         + "tinting players who share a character. 'auto' restores normal behaviour, 'off' disables tinting. "
-        + "'outline <px>' sets icon outline thickness, 'diag' reports what the mod has done. "
+        + "'outline <px>' sets icon outline thickness, 'icon' swaps the solo map pin for the co-op head "
+        + "icon, 'diag' reports what the mod has done. "
         + "With no argument, reports the current setting.";
 
     public override bool IsNetworked => false;
@@ -61,6 +63,11 @@ public class TintConsoleCmd : AbstractConsoleCmd
         if (requested == "diag")
         {
             return Diagnose(args);
+        }
+
+        if (requested == "icon")
+        {
+            return Icon(args);
         }
         var match = Options.FirstOrDefault(o => o.Name == requested);
         if (match.Name == null)
@@ -117,6 +124,39 @@ public class TintConsoleCmd : AbstractConsoleCmd
         return new CmdResult(
             success: true,
             $"tint outline: {PlayerTint.OutlineThickness}px{clamped} — {repainted} on screen updated.");
+    }
+
+    /// <summary>
+    /// <c>tint icon [marker|character]</c> — swap the solo map marker for the co-op head icon.
+    /// </summary>
+    /// <remarks>
+    /// The vote icons that carry the colour key in co-op never appear in single player, so this borrows
+    /// their art for the marker instead. It is the closest you can get to judging the multiplayer look
+    /// without a second player.
+    /// </remarks>
+    private static CmdResult Icon(string[] args)
+    {
+        if (args.Length < 2)
+        {
+            return new CmdResult(
+                success: true,
+                $"tint icon: {(PlayerTint.UseCharacterIconOnMap ? "character" : "marker")} "
+                + "(marker = the normal solo pin, character = the co-op head icon).");
+        }
+
+        var requested = args[1].Trim().ToLowerInvariant();
+        if (requested is not ("marker" or "character"))
+        {
+            return new CmdResult(success: false, $"'{args[1]}' is not marker or character.");
+        }
+
+        PlayerTint.UseCharacterIconOnMap = requested == "character";
+        var applied = MapMarkerTintPatch.Apply();
+
+        return new CmdResult(
+            success: true,
+            $"tint icon: {requested}."
+            + (applied ? " Map marker updated." : " No map marker on screen — open the map to see it."));
     }
 
     /// <summary><c>tint diag [on|off]</c> — what the mod has actually done, for when nothing shows up.</summary>

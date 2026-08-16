@@ -65,6 +65,8 @@ public static class IconOutline
             InstallShader(outline);
         }
 
+        OutlineShader.SetAlphaRange(outline, outline.Texture);
+
         ApplyThickness(outline, player);
         PlayerTint.ApplyOutline(outline, player, baseInk, Alpha, dormant);
     }
@@ -103,18 +105,21 @@ public static class IconOutline
             return;
         }
 
-        var existing = icon.GetNodeOrNull<TextureRect>(NodeName);
-        if (existing != null)
-        {
-            ApplyThickness(existing, player);
-            PlayerTint.ApplyOutline(existing, player, baseInk, Alpha, PlayerTint.DormantOutline);
-            return;
-        }
-
         var texture = outlineTexture ?? fallbackTexture;
         if (texture == null)
         {
             Diagnostics.Log($"outline skipped for {player.Character?.Id}: no icon or outline texture");
+            return;
+        }
+
+        var existing = icon.GetNodeOrNull<TextureRect>(NodeName);
+        if (existing != null)
+        {
+            // Re-textured rather than only recoloured, so `tint icon` can swap the art under a live outline.
+            existing.Texture = texture;
+            OutlineShader.SetAlphaRange(existing, texture);
+            ApplyThickness(existing, player);
+            PlayerTint.ApplyOutline(existing, player, baseInk, Alpha, PlayerTint.DormantOutline);
             return;
         }
 
@@ -139,6 +144,7 @@ public static class IconOutline
         Attached.AddOrUpdate(outline, new OutlineHost(icon, player));
 
         InstallShader(outline);
+        OutlineShader.SetAlphaRange(outline, texture);
         ApplyThickness(outline, player);
 
         // Dormant means invisible: outlines this mod created did not exist in the vanilla game.

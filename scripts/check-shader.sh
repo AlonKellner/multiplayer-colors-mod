@@ -53,10 +53,13 @@ if grep -q 'SHADER ERROR' <<<"$OUT"; then
   exit 1
 fi
 
-if ! grep -q 'UNIFORMS \["outline_color"\]' <<<"$OUT"; then
-  echo "FAIL: outline_color uniform did not parse — the C# sets it by that name" >&2
-  grep 'UNIFORMS' <<<"$OUT" >&2
-  exit 1
-fi
+# Every uniform the C# sets by string name must actually exist, or that write silently does nothing.
+for u in outline_color alpha_min alpha_max; do
+  if ! grep -q "\"$u\"" <<<"$(grep 'UNIFORMS' <<<"$OUT")"; then
+    echo "FAIL: uniform '$u' did not parse — the C# sets it by that name" >&2
+    grep 'UNIFORMS' <<<"$OUT" >&2
+    exit 1
+  fi
+done
 
-echo "OK: shader compiles and exposes outline_color"
+echo "OK: shader compiles and exposes outline_color, alpha_min, alpha_max"

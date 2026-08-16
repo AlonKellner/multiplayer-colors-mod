@@ -175,6 +175,59 @@ public class TintConsoleCmdTests : IDisposable
         }
     }
 
+    [Theory]
+    [InlineData("character", true)]
+    [InlineData("marker", false)]
+    public void SwapsTheSoloMapIcon(string arg, bool expected)
+    {
+        try
+        {
+            var result = _cmd.Process(null, ["icon", arg]);
+
+            Assert.True(result.success, result.msg);
+            Assert.Equal(expected, PlayerTint.UseCharacterIconOnMap);
+        }
+        finally
+        {
+            PlayerTint.UseCharacterIconOnMap = false;
+        }
+    }
+
+    [Fact]
+    public void ReportsTheIconChoiceWhenGivenNoArgument()
+    {
+        var result = _cmd.Process(null, ["icon"]);
+
+        Assert.True(result.success);
+        Assert.Contains("icon", result.msg, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RejectsAnUnknownIconChoice()
+    {
+        var before = PlayerTint.UseCharacterIconOnMap;
+
+        var result = _cmd.Process(null, ["icon", "portrait"]);
+
+        Assert.False(result.success);
+        Assert.Equal(before, PlayerTint.UseCharacterIconOnMap);
+    }
+
+    [Fact]
+    public void SwappingTheIconDoesNotClearTheVariation()
+    {
+        PlayerTint.Override = TintOverride.Cooler;
+        try
+        {
+            _cmd.Process(null, ["icon", "character"]);
+            Assert.Equal(TintOverride.Cooler, PlayerTint.Override);
+        }
+        finally
+        {
+            PlayerTint.UseCharacterIconOnMap = false;
+        }
+    }
+
     [Fact]
     public void ReportsDiagnostics()
     {

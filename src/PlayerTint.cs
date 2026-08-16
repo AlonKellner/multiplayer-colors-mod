@@ -414,6 +414,12 @@ public static class PlayerTint
 
     public const float MaxOutlineThickness = 12f;
 
+    /// <summary>
+    /// Whether the single-player map marker borrows the multiplayer vote icon's character-head art, so the
+    /// co-op look can be judged solo. Toggled by <c>tint icon</c>; a testing aid, off by default.
+    /// </summary>
+    public static bool UseCharacterIconOnMap { get; set; }
+
     public static float ClampThickness(float pixels) =>
         Mathf.Clamp(pixels, MinOutlineThickness, MaxOutlineThickness);
 
