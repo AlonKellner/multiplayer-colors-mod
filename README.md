@@ -89,7 +89,7 @@ tint off            # no tint at all
 tint auto           # back to normal (only players sharing a character get tinted)
 
 tint outline        # report icon outline thickness
-tint outline 5      # set it, in pixels (0-12, default 5; 0 hides the outline)
+tint outline 3      # set it, in pixels (0-12, default 3; 0 hides the outline)
 tint icon           # report which art the solo map pin uses
 tint icon character # show the real co-op vote icon, to judge the multiplayer look solo
 tint icon marker    # back to the normal solo pin

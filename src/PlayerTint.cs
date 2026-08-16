@@ -432,7 +432,7 @@ public static class PlayerTint
     /// <summary>How far an outline extends past its icon, in pixels. Tunable live via <c>tint outline</c>.</summary>
     public static float OutlineThickness { get; set; } = DefaultOutlineThickness;
 
-    public const float DefaultOutlineThickness = 5f;
+    public const float DefaultOutlineThickness = 3f;
 
     /// <summary>Zero is allowed — it is how you turn outlines off without turning the tint off.</summary>
     public const float MinOutlineThickness = 0f;

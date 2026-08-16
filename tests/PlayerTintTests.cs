@@ -780,9 +780,9 @@ public class OutlineTests
     }
 
     [Fact]
-    public void ThicknessDefaultsToFivePixels()
+    public void ThicknessDefaultsToThreePixels()
     {
-        Assert.Equal(5f, PlayerTint.DefaultOutlineThickness, 3);
+        Assert.Equal(3f, PlayerTint.DefaultOutlineThickness, 3);
     }
 
     [Fact]
