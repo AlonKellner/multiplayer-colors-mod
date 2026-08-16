@@ -54,6 +54,8 @@ public static class MapInkProbe
                 lines.Add("no drawn lines found — draw on the map first, then run this again");
             }
 
+            SampleViewports(screen, lines);
+
             foreach (var line in found)
             {
                 lines.Add(
@@ -69,6 +71,83 @@ public static class MapInkProbe
         }
 
         return lines;
+    }
+
+    /// <summary>
+    /// Reads the drawing viewport's actual pixels back off the GPU.
+    /// </summary>
+    /// <remarks>
+    /// This is the measurement that settles it. The lines are drawn into a SubViewport and then composited
+    /// onto the map with premultiplied alpha, where a pixel lands as <c>ink + parchment x (1 - alpha)</c> —
+    /// brighter than the ink itself for anything short of fully opaque, and exactly the ink at alpha 1. Our
+    /// outline is drawn with ordinary blending, so at alpha 1 the two agree exactly and below it they do
+    /// not. Whether a "homogeneous" fill truly reaches alpha 1 is not something either of us can judge by
+    /// eye, so read it.
+    /// </remarks>
+    private static void SampleViewports(Node screen, List<string> lines)
+    {
+        var viewports = new List<SubViewport>();
+        CollectViewports(screen, viewports);
+
+        foreach (var viewport in viewports)
+        {
+            var image = viewport.GetTexture()?.GetImage();
+            if (image == null)
+            {
+                continue;
+            }
+
+            var maxAlpha = 0f;
+            var opaque = 0;
+            var painted = 0;
+            var at = Colors.Transparent;
+
+            for (var y = 0; y < image.GetHeight(); y += 2)
+            {
+                for (var x = 0; x < image.GetWidth(); x += 2)
+                {
+                    var px = image.GetPixel(x, y);
+                    if (px.A <= 0.01f)
+                    {
+                        continue;
+                    }
+
+                    painted++;
+                    if (px.A > 0.99f)
+                    {
+                        opaque++;
+                    }
+
+                    if (px.A > maxAlpha)
+                    {
+                        maxAlpha = px.A;
+                        at = px;
+                    }
+                }
+            }
+
+            lines.Add(
+                $"viewport {viewport.Size.X}x{viewport.Size.Y}: painted={painted} fullyOpaque={opaque} "
+                + $"maxAlpha={maxAlpha:F3} at=#{at.ToHtml()}");
+        }
+    }
+
+    private static void CollectViewports(Node node, List<SubViewport> into)
+    {
+        if (into.Count >= 4)
+        {
+            return;
+        }
+
+        if (node is SubViewport viewport)
+        {
+            into.Add(viewport);
+        }
+
+        foreach (var child in node.GetChildren())
+        {
+            CollectViewports(child, into);
+        }
     }
 
     /// <summary>The modulate of every ancestor multiplied together — what the screen applies on top.</summary>
