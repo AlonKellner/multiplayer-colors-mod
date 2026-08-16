@@ -18,6 +18,16 @@ public static class Diagnostics
     /// <summary>Whether routine activity is written as it happens. Reports are written either way.</summary>
     public static bool Enabled { get; set; }
 
+    /// <summary>
+    /// True once the mod has started inside the game. Diagnostics that touch Godot statics must check this.
+    /// </summary>
+    /// <remarks>
+    /// Not defensive clutter: the test suite exercises the console command, and reaching a Godot static from
+    /// there does not throw — it takes the whole test host process down. That is precisely how this flag
+    /// came to exist.
+    /// </remarks>
+    public static bool InGame { get; set; }
+
     /// <summary>The most recent lines, newest last, for reporting back through the console command.</summary>
     private static readonly Queue<string> Recent = new();
 

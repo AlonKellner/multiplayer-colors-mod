@@ -204,6 +204,7 @@ public static class IconOutline
                 + $"ink=#{player.Character.MapDrawingColor.ToHtml(false)} "
                 + $"want=#{expected.ToHtml()} got=#{actual.ToHtml()} "
                 + $"{(matches ? "MATCH" : "MISMATCH")} "
+                + $"ancestors={(MapInkProbe.Accumulated(outline).IsEqualApprox(Colors.White) ? "none" : "#" + MapInkProbe.Accumulated(outline).ToHtml())} "
                 + $"shader={(OutlineShader.HasShader(outline) ? "yes" : "NO")} "
                 + $"visible={outline.Visible && outline.IsVisibleInTree()}");
         }

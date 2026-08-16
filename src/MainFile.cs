@@ -23,6 +23,7 @@ public static class MainFile
     {
         // Diagnostics record regardless; this is what makes them reach the game log.
         Diagnostics.Sink = message => Logger.Info(message);
+        Diagnostics.InGame = true;
 
         Harmony harmony = new(ModId);
         harmony.PatchAll();

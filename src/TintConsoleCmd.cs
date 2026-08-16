@@ -196,6 +196,10 @@ public class TintConsoleCmd : AbstractConsoleCmd
             : $"outlines live: {outlines.Count}");
         lines.AddRange(outlines.Select(l => "  " + l));
 
+        var probe = MapInkProbe.Describe();
+        lines.Add("map ink:");
+        lines.AddRange(probe.Select(l => "  " + l));
+
         var tail = Diagnostics.Tail();
         lines.Add(tail.Count == 0
             ? "no outline activity recorded yet — open the map, or enter a room with player icons"
