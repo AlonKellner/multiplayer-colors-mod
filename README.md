@@ -118,7 +118,13 @@ transforms emission positions and velocities by the emitter's transform but *not
 SpineSprite is scaled around 0.28, so in global mode the darker variation's inward pull would come out
 several times stronger than the frame it was sized against.
 
-Two more dials: `tint particles <0-1>` and `tint particles count <n>`.
+Three more dials: `tint particles <0-1>`, `tint particles count <n>` and `tint particles size <n>`.
+
+One trap worth naming, since it shipped once: `CpuParticles2D.ScaleAmount` is a *multiplier on the
+texture*, not a size in units. Handing it a radius-derived size blows a 32px texture up by the figure's
+radius, which on a Spine body — whose local units are several screen pixels each — makes the motes
+enormous. `AuraParticles.ScaleFor` divides by the texture's own resolution, which also means the mote art
+can be made sharper without silently resizing every particle in the mod.
 
 ## Mod support
 
@@ -164,6 +170,7 @@ tint aura spread .25 # set how far it reaches past the figure
 tint particles      # report particle strength and count
 tint particles 0.28 # set the strength (0-1, default 0.28; 0 hides them)
 tint particles count 14
+tint particles size 0.022  # mote size, as a fraction of the figure (default 0.022)
 tint icon           # report which art the solo map pin uses
 tint icon character # show the real co-op vote icon, to judge the multiplayer look solo
 tint icon marker    # back to the normal solo pin

@@ -36,7 +36,7 @@ public class TintConsoleCmd : AbstractConsoleCmd
     public override string CmdName => "tint";
 
     public override string Args => "[" + string.Join("|", Options.Select(o => o.Name))
-        + "|outline <px>|aura <0-1>|aura spread <0-1>|particles <0-1>|particles count <n>"
+        + "|outline <px>|aura <0-1>|aura spread <0-1>|particles <0-1>|particles count <n>|particles size <n>"
         + "|icon <marker|character>|diag]";
 
     public override string Description =>
@@ -223,6 +223,11 @@ public class TintConsoleCmd : AbstractConsoleCmd
             return ParticleCount(args);
         }
 
+        if (args.Length >= 2 && args[1].Trim().ToLowerInvariant() == "size")
+        {
+            return ParticleSize(args);
+        }
+
         if (args.Length < 2)
         {
             return new CmdResult(success: true, ParticleStatus());
@@ -267,11 +272,37 @@ public class TintConsoleCmd : AbstractConsoleCmd
             $"tint particles count: {PlayerTint.ParticleCount}{clamped} — {rebuilt} node(s) rebuilt.");
     }
 
+    private static CmdResult ParticleSize(string[] args)
+    {
+        if (args.Length < 3)
+        {
+            return new CmdResult(success: true, ParticleStatus());
+        }
+
+        if (!float.TryParse(args[2].Trim(), out var requested))
+        {
+            return new CmdResult(success: false, $"'{args[2]}' is not a particle size.");
+        }
+
+        PlayerTint.ParticleSize = PlayerTint.ClampParticleSize(requested);
+        var rebuilt = PlayerTint.Refresh();
+
+        var clamped = Math.Abs(requested - PlayerTint.ParticleSize) > 0.0001f
+            ? $" (clamped from {requested})"
+            : string.Empty;
+
+        return new CmdResult(
+            success: true,
+            $"tint particles size: {PlayerTint.ParticleSize:F3}{clamped} — {rebuilt} node(s) rebuilt.");
+    }
+
     private static string ParticleStatus() =>
         $"tint particles: strength {PlayerTint.ParticleStrength:F2} "
         + $"(range {PlayerTint.MinParticleStrength}-{PlayerTint.MaxParticleStrength}, 0 hides them), "
         + $"count {PlayerTint.ParticleCount} "
-        + $"(range {PlayerTint.MinParticleCount}-{PlayerTint.MaxParticleCount}). "
+        + $"(range {PlayerTint.MinParticleCount}-{PlayerTint.MaxParticleCount}), "
+        + $"size {PlayerTint.ParticleSize:F3} of the figure "
+        + $"(range {PlayerTint.MinParticleSize}-{PlayerTint.MaxParticleSize}). "
         + "Brighter throws them outward, darker draws them in, warmer rises, cooler falls.";
 
     /// <summary>

@@ -552,6 +552,18 @@ public static class PlayerTint
     public static float ClampParticleStrength(float strength) =>
         Mathf.Clamp(strength, MinParticleStrength, MaxParticleStrength);
 
+    /// <summary>How big a mote is drawn, as a fraction of the figure's radius.</summary>
+    public static float ParticleSize { get; set; } = DefaultParticleSize;
+
+    /// <summary>A speck. Past roughly a tenth it stops reading as a mote and starts reading as an object.</summary>
+    public const float DefaultParticleSize = 0.022f;
+
+    public const float MinParticleSize = 0.002f;
+
+    public const float MaxParticleSize = 0.15f;
+
+    public static float ClampParticleSize(float size) => Mathf.Clamp(size, MinParticleSize, MaxParticleSize);
+
     /// <summary>How many particles each figure carries. Live via <c>tint particles count</c>.</summary>
     public static int ParticleCount { get; set; } = DefaultParticleCount;
 

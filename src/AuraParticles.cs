@@ -56,10 +56,8 @@ public static class AuraParticles
     /// <summary>How long a mote lives, in seconds. Long enough to cross the frame at these speeds.</summary>
     public const float Lifetime = 2.4f;
 
-    /// <summary>
-    /// How big a mote is drawn, as a fraction of the figure's radius. Small enough to read as a speck.
-    /// </summary>
-    public const float Size = 0.035f;
+    /// <summary>The mote texture's width in pixels. Shared, so the scale maths and the texture agree.</summary>
+    public const float TexturePixels = 32f;
 
     /// <summary>The motion that names a variation.</summary>
     public static ParticleMotion MotionFor(PlayerVariation variation) => variation switch
@@ -177,8 +175,9 @@ public static class AuraParticles
                 break;
         }
 
-        node.ScaleAmountMin = radius * Size * 0.6f;
-        node.ScaleAmountMax = radius * Size * 1.4f;
+        var scale = ScaleFor(radius, TexturePixels);
+        node.ScaleAmountMin = scale * 0.6f;
+        node.ScaleAmountMax = scale * 1.4f;
 
         node.Color = ColorFor(variation.Value, strength);
         node.ColorRamp = Ramp(motion.FadeIn);
@@ -186,6 +185,22 @@ public static class AuraParticles
         node.Visible = true;
         node.Emitting = true;
     }
+
+    /// <summary>
+    /// The multiplier to hand <c>ScaleAmount</c> so a mote is drawn at <see cref="PlayerTint.ParticleSize" />
+    /// of the figure's radius.
+    /// </summary>
+    /// <remarks>
+    /// <c>CpuParticles2D.ScaleAmount</c> is a multiplier on the texture, NOT a size in units — which is
+    /// what shipped in v0.1.30 and is why the motes came out enormous. A figure's radius is measured in
+    /// the art node's own local units, and a SpineSprite is scaled around 0.28, so passing a radius-derived
+    /// size straight in blew a 32px texture up by a factor of ten or more.
+    ///
+    /// Dividing by the texture's own resolution also decouples the two: the mote art can be made sharper
+    /// without silently resizing every particle in the mod.
+    /// </remarks>
+    public static float ScaleFor(float radius, float texturePixels) =>
+        texturePixels <= 0f ? 0f : PlayerTint.ClampParticleSize(PlayerTint.ParticleSize) * radius / texturePixels;
 
     /// <summary>Half the frame's smaller side — the distance everything is expressed against.</summary>
     public static float Radius(Rect2 frame) => 0.5f * MathF.Min(frame.Size.X, frame.Size.Y);

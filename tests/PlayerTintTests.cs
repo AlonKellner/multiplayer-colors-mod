@@ -1401,6 +1401,53 @@ public class ParticleTests
     }
 
     [Fact]
+    public void AMoteIsDrawnAtTheIntendedFractionOfTheFigure()
+    {
+        // CpuParticles2D.ScaleAmount is a MULTIPLIER ON THE TEXTURE, not a size in units. Handing it a
+        // size — which is what shipped in v0.1.30 — blows a 32px texture up by the figure's radius, so on
+        // a Spine body whose local units are several screen pixels each the motes came out enormous.
+        const float radius = 400f;
+
+        var drawn = AuraParticles.ScaleFor(radius, texturePixels: 32f) * 32f;
+
+        Assert.Equal(PlayerTint.ParticleSize * radius, drawn, 3);
+    }
+
+    [Fact]
+    public void MoteScaleIsIndependentOfTheTextureResolution()
+    {
+        // Whatever the mote texture's resolution, the mote is the same size on screen — so the texture can
+        // be made sharper without silently resizing every particle in the mod.
+        Assert.Equal(
+            AuraParticles.ScaleFor(300f, 32f) * 32f,
+            AuraParticles.ScaleFor(300f, 128f) * 128f,
+            3);
+    }
+
+    [Fact]
+    public void AMoteTextureWithNoSizeDoesNotProduceAnInfiniteMote()
+    {
+        Assert.Equal(0f, AuraParticles.ScaleFor(300f, 0f), 4);
+    }
+
+    [Theory]
+    [InlineData(-1f, PlayerTint.MinParticleSize)]
+    [InlineData(0.02f, 0.02f)]
+    [InlineData(99f, PlayerTint.MaxParticleSize)]
+    public void ParticleSizeIsClampedToARangeThatStaysAMote(float requested, float expected)
+    {
+        Assert.Equal(expected, PlayerTint.ClampParticleSize(requested), 4);
+    }
+
+    [Fact]
+    public void DefaultParticleSizeIsASpeck()
+    {
+        // A few percent of the figure. Past about a tenth it stops reading as a mote and starts reading as
+        // an object the character is surrounded by.
+        Assert.InRange(PlayerTint.DefaultParticleSize, 0.004f, 0.05f);
+    }
+
+    [Fact]
     public void ParticlesAreDrawnBehindTheArtLikeTheAura()
     {
         // Emerging from behind the figure, and vanishing behind it on the way in, is what keeps this

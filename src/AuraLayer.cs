@@ -281,6 +281,8 @@ public static class AuraLayer
             + $"dir={host.Motes.Direction.X:F1},{host.Motes.Direction.Y:F1} "
             + $"spread={host.Motes.Spread:F0} v={host.Motes.InitialVelocityMax:F0} "
             + $"radial={host.Motes.RadialAccelMax:F0} shape={host.Motes.EmissionShape} "
+            + $"scale={host.Motes.ScaleAmountMax:F2} "
+            + $"drawn={host.Motes.ScaleAmountMax * AuraParticles.TexturePixels:F0}u "
             + $"visible={host.Motes.Visible && host.Motes.IsVisibleInTree()}";
     }
 
@@ -296,8 +298,8 @@ public static class AuraLayer
 
     private static GradientTexture2D MoteTexture() => _moteTexture ??= new GradientTexture2D
     {
-        Width = 32,
-        Height = 32,
+        Width = (int)AuraParticles.TexturePixels,
+        Height = (int)AuraParticles.TexturePixels,
         Fill = GradientTexture2D.FillEnum.Radial,
         FillFrom = new Vector2(0.5f, 0.5f),
         FillTo = new Vector2(0.5f, 1f),
