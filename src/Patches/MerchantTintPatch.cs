@@ -1,3 +1,4 @@
+using Godot;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Nodes.Rooms;
 
@@ -33,6 +34,11 @@ public static class MerchantTintPatch
             for (var i = 0; i < count; i++)
             {
                 PlayerTint.Apply(visuals[i], players[i]);
+
+                // The tint sits on the NMerchantCharacter root, which composes with the 0.5 grey this
+                // method puts on back-row figures. The aura needs the figure itself — the one child the
+                // scene has, and the same one NMerchantCharacter._Ready drives its animation through.
+                AuraLayer.Attach(visuals[i].GetChildOrNull<CanvasItem>(0), players[i]);
             }
         }
         catch (Exception e)

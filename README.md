@@ -36,6 +36,9 @@ Applied to:
   the party side panel — so a line drawn on the map can be traced back to whoever drew it
 - the player's **map ink** and **map pings**
 - the **remote targeting line** drawn during another player's turn
+- a faint **aura** behind every one of those figures, in a colour that names the variation rather than the
+  character — white, black, red, blue
+
 
 Nothing else is touched. Anything mechanical stays vanilla: cards, Defect orbs and orb evocation, power and
 intent icons, health bars, targeting arrows, selection reticles, form-VFX auras and UI chrome. That falls
@@ -51,6 +54,41 @@ Ordering is by `Player.NetId`, a network identity that is the same value on ever
 It deliberately does not use `RunState.GetPlayerSlotIndex`: that list is populated once from the lobby and
 looks stable, but its order is consistent only by convention, and if it ever differed the whole lobby would
 disagree about who is which colour. Nothing about a colour assignment needs to depend on list position.
+
+## The aura
+
+The tint is a **relative** signal — "this Ironclad is a fifth brighter than that one" — and the game
+destroys it routinely. `NCombatRoom.PositionPlayersAndPets` assigns `Modulate = 0.5 grey` to back-row
+players, so a *brighter* player standing behind can read darker than a *darker* player standing in front.
+That is the exact comparison this mod exists to support.
+
+So each tinted figure also carries a faint glow behind it, keyed to the variation rather than to the
+character: **white** for brighter, **black** for darker, **red** for warmer, **blue** for cooler. A white
+halo stays a light halo and a black halo stays a dark halo however hard the figure is dimmed, because the
+reading is categorical rather than relative. This is the one place in the mod where *not* deriving from the
+character is the right answer.
+
+Art only. Icons, map ink, pings and targeting lines already carry the outline key, and a second signal
+there would say nothing new.
+
+It is drawn as a soft radial falloff in a `ColorRect` **behind** the figure, sized to the figure's real
+box. There is no silhouette in it — the figure does the shaping, by covering the middle and leaving only
+the fringe around its own outline visible.
+
+An exact silhouette is not available here the way it is for icons. Almost every tinted surface is Spine
+skeleton art, and the dilate-the-alpha trick [src/OutlineShader.cs](src/OutlineShader.cs) uses needs a
+texture: sampling outside a Spine atlas region bleeds into whatever art is packed beside it. The only exact
+option is reparenting each figure under a `CanvasGroup`, which changes how additive Spine slots composite
+(Ironclad's fire, its eye flame, Regent's effects) and costs a render target per creature — too much to
+risk for an effect that is meant to be barely perceptible.
+
+Measuring the figure is a search rather than a lookup, since a `Node2D` has no bounding box in general:
+the Spine runtime's own `get_bounds()` first, then a `TextureRect`'s art where it is actually drawn (the
+treasure-room arm is letterboxed inside a rect nearly three times its own height, so the raw rect would put
+the glow's peak off the bottom of the screen), then a scene-authored box like `%Bounds` in combat. Whichever
+answered is printed by `tint diag`, because "no aura" and "aura in the wrong place" have different causes.
+
+Two dials, both live: `tint aura <0-1>` for strength and `tint aura spread <0-1>` for reach.
 
 ## Mod support
 
@@ -90,6 +128,9 @@ tint auto           # back to normal (only players sharing a character get tinte
 
 tint outline        # report icon outline thickness
 tint outline 3      # set it, in pixels (0-12, default 3; 0 hides the outline)
+tint aura           # report aura strength and spread
+tint aura 0.18      # set the strength (0-1, default 0.18; 0 hides the aura)
+tint aura spread .25 # set how far it reaches past the figure
 tint icon           # report which art the solo map pin uses
 tint icon character # show the real co-op vote icon, to judge the multiplayer look solo
 tint icon marker    # back to the normal solo pin
@@ -104,7 +145,9 @@ differs, unavoidably: in co-op these sit in a row under a map point, one per vot
 this rides the solo marker as it hops between nodes.
 
 `tint diag` always writes its report to the game log as well as the console, so there is never
-anything to transcribe by hand. It prints one line per live outline: the character's ink colour, the colour the outline
+anything to transcribe by hand. It prints one line per live aura — the measured figure box, which source
+measured it, the frame drawn, the colour wanted versus the colour that arrived, and whether the shader
+attached — and one line per live outline: the character's ink colour, the colour the outline
 *should* be carrying, the colour it is *actually* carrying, whether the two match, and whether the
 silhouette shader is attached. If an outline ever looks wrong, that line says which half is at fault.
 
@@ -163,6 +206,7 @@ Requires .NET 9 and a local Slay the Spire 2 install (the project compiles again
 ```bash
 dotnet build MultiplayerColors.csproj
 dotnet test tests/MultiplayerColors.Tests.csproj
+scripts/check-shader.sh          # compiles every shader with the real Godot parser
 ```
 
 **This mod is distributed through the Steam Workshop only — `build` deliberately does not deploy into the
@@ -182,7 +226,7 @@ This is a DLL-only mod — no `.pck`, no Godot project, no export step, and no B
 `tests/` covers the two things that can break silently:
 
 - **`PlayerTintTests`** — the roster logic and the colour maths, including that assignment follows slot
-  index rather than list order.
+  index rather than list order, the outline key, and the aura's colours, falloff and framing.
 - **`TintConsoleCmdTests`** — the `tint` command's parsing, and that `TintOverride` stays aligned with
   `PlayerVariation` (they're bridged by an enum cast that would silently pick the wrong colour if they
   drifted apart).

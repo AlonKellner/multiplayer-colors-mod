@@ -229,6 +229,109 @@ public class TintConsoleCmdTests : IDisposable
     }
 
     [Fact]
+    public void SetsTheAuraStrength()
+    {
+        try
+        {
+            var result = _cmd.Process(null, ["aura", "0.4"]);
+
+            Assert.True(result.success, result.msg);
+            Assert.Equal(0.4f, PlayerTint.AuraStrength, 3);
+        }
+        finally
+        {
+            PlayerTint.AuraStrength = PlayerTint.DefaultAuraStrength;
+        }
+    }
+
+    [Fact]
+    public void ClampsAnOutOfRangeAuraStrength()
+    {
+        try
+        {
+            Assert.True(_cmd.Process(null, ["aura", "9"]).success);
+            Assert.Equal(PlayerTint.MaxAuraStrength, PlayerTint.AuraStrength, 3);
+        }
+        finally
+        {
+            PlayerTint.AuraStrength = PlayerTint.DefaultAuraStrength;
+        }
+    }
+
+    [Fact]
+    public void SetsTheAuraSpread()
+    {
+        try
+        {
+            var result = _cmd.Process(null, ["aura", "spread", "0.4"]);
+
+            Assert.True(result.success, result.msg);
+            Assert.Equal(0.4f, PlayerTint.AuraSpread, 3);
+            Assert.Equal(PlayerTint.DefaultAuraStrength, PlayerTint.AuraStrength, 3);
+        }
+        finally
+        {
+            PlayerTint.AuraSpread = PlayerTint.DefaultAuraSpread;
+        }
+    }
+
+    [Fact]
+    public void ReportsTheAuraWhenGivenNoNumber()
+    {
+        var result = _cmd.Process(null, ["aura"]);
+
+        Assert.True(result.success);
+        Assert.Contains("aura", result.msg, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RejectsAnAuraStrengthThatIsNotANumber()
+    {
+        var before = PlayerTint.AuraStrength;
+
+        var result = _cmd.Process(null, ["aura", "glowy"]);
+
+        Assert.False(result.success);
+        Assert.Equal(before, PlayerTint.AuraStrength, 3);
+    }
+
+    [Fact]
+    public void RejectsAnAuraSpreadThatIsNotANumber()
+    {
+        var before = PlayerTint.AuraSpread;
+
+        var result = _cmd.Process(null, ["aura", "spread", "wide"]);
+
+        Assert.False(result.success);
+        Assert.Equal(before, PlayerTint.AuraSpread, 3);
+    }
+
+    [Fact]
+    public void AuraIsNotMistakenForAVariation()
+    {
+        PlayerTint.Override = TintOverride.Darker;
+        try
+        {
+            _cmd.Process(null, ["aura", "0.3"]);
+            Assert.Equal(TintOverride.Darker, PlayerTint.Override);
+        }
+        finally
+        {
+            PlayerTint.AuraStrength = PlayerTint.DefaultAuraStrength;
+        }
+    }
+
+    [Fact]
+    public void ArgsStringMentionsEverySubcommand()
+    {
+        // The usage line shown by `help` is the only place these are discoverable in game.
+        foreach (var sub in new[] { "outline", "icon", "aura", "diag" })
+        {
+            Assert.Contains(sub, _cmd.Args);
+        }
+    }
+
+    [Fact]
     public void ReportsDiagnostics()
     {
         var result = _cmd.Process(null, ["diag"]);

@@ -293,6 +293,16 @@ public static class PlayerTint
     public static void ApplyOutline(CanvasItem? node, Player? player, Color baseInk, float activeAlpha, Color dormant) =>
         Apply(node, player, TintKind.Outline, baseInk, activeAlpha, dormant);
 
+    /// <summary>
+    /// Registers an aura layer so <see cref="Refresh" /> repaints it, exactly as outlines are registered.
+    /// </summary>
+    /// <remarks>
+    /// Its colour comes from the live <see cref="AuraStrength" /> at paint time rather than being captured
+    /// here, so <c>tint aura 0.4</c> moves what is already on screen.
+    /// </remarks>
+    public static void ApplyAura(CanvasItem? node, Player? player) =>
+        Apply(node, player, TintKind.Aura, dormant: DormantAura);
+
     private static void Apply(
         CanvasItem? node,
         Player? player,
@@ -318,6 +328,7 @@ public static class PlayerTint
             {
                 TintKind.SelfModulate => node.SelfModulate,
                 TintKind.Outline => dormant ?? DormantOutline,
+                TintKind.Aura => dormant ?? DormantAura,
                 _ => node.Modulate,
             };
 
@@ -428,6 +439,94 @@ public static class PlayerTint
     /// <see cref="ApplyOutline" /> captures automatically.
     /// </remarks>
     public static readonly Color DormantOutline = new(0f, 0f, 0f, 0f);
+
+    // ---- Colour-key aura ----------------------------------------------------------------------------
+    // A faint glow behind each tinted figure, in a colour that names the VARIATION rather than the
+    // character. The tint on its own is a relative signal — "this Ironclad is a fifth brighter than that
+    // one" — and the game destroys it routinely: NCombatRoom.PositionPlayersAndPets assigns
+    // Modulate = 0.5 grey to back-row players, so a brighter player standing behind can read darker than a
+    // darker player standing in front. That is the exact comparison this mod exists to support.
+    //
+    // A white halo stays a light halo and a black halo stays a dark halo however hard the figure is dimmed,
+    // because the reading is categorical rather than relative. That is the whole point of these being four
+    // fixed colours and not four functions of the character's own palette — the one place in this mod where
+    // NOT deriving from the character is the correct answer.
+
+    private static readonly Color BrighterAura = Colors.White;
+    private static readonly Color DarkerAura = Colors.Black;
+
+    // Not the pure primaries: at the strengths this is drawn with, #FF0000 reads muddy over the warm
+    // battlefield and #0000FF disappears into a dark one. These are lifted just far enough to stay legible
+    // while still being named "red" and "blue" by anyone asked.
+    private static readonly Color WarmerAura = new("FF2A14");
+    private static readonly Color CoolerAura = new("1E5AFF");
+
+    /// <summary>The aura colour for a variation, fully opaque. Strength is applied by <see cref="AuraFor" />.</summary>
+    public static Color AuraColor(PlayerVariation variation) => variation switch
+    {
+        PlayerVariation.Brighter => BrighterAura,
+        PlayerVariation.Darker => DarkerAura,
+        PlayerVariation.Warmer => WarmerAura,
+        PlayerVariation.Cooler => CoolerAura,
+        _ => DormantAura,
+    };
+
+    /// <summary>The aura colour at a given strength, which the shader takes as its alpha.</summary>
+    public static Color AuraFor(PlayerVariation variation, float strength)
+    {
+        var colour = AuraColor(variation);
+        return new Color(colour.R, colour.G, colour.B, ClampAuraStrength(strength));
+    }
+
+    /// <summary>
+    /// The aura for a player, or <c>null</c> when they have no variation — in which case nothing should be
+    /// drawn at all.
+    /// </summary>
+    public static Color? AuraColorFor(Player? player, float strength)
+    {
+        var variation = For(player);
+        return variation == null ? null : AuraFor(variation.Value, strength);
+    }
+
+    /// <summary>The colour an aura takes while its player has no variation: gone.</summary>
+    /// <remarks>
+    /// Auras did not exist in the vanilla game, so with no variation they have to vanish rather than fall
+    /// back to a colour of their own — the same rule as an outline this mod created.
+    /// </remarks>
+    public static readonly Color DormantAura = new(0f, 0f, 0f, 0f);
+
+    /// <summary>How strong the aura is drawn, as the peak alpha at the centre of the glow.</summary>
+    public static float AuraStrength { get; set; } = DefaultAuraStrength;
+
+    /// <summary>
+    /// Deliberately low. The brief is "slight, and soft, not obviously perceptible" — legible when looked
+    /// for, invisible when not — and the visible fringe is well below this, since the peak sits behind the
+    /// figure and the falloff has already given most of it up by the time it clears the silhouette.
+    /// </summary>
+    public const float DefaultAuraStrength = 0.18f;
+
+    /// <summary>Zero is allowed — it is how you turn the aura off without turning the tint off.</summary>
+    public const float MinAuraStrength = 0f;
+
+    public const float MaxAuraStrength = 1f;
+
+    public static float ClampAuraStrength(float strength) =>
+        Mathf.Clamp(strength, MinAuraStrength, MaxAuraStrength);
+
+    /// <summary>How far the glow reaches past the figure, as a fraction of the figure's smaller side.</summary>
+    public static float AuraSpread { get; set; } = DefaultAuraSpread;
+
+    public const float DefaultAuraSpread = 0.25f;
+
+    /// <summary>
+    /// Floored rather than allowed to reach zero: a frame the same size as the figure has nowhere to fade
+    /// through, so the glow would be a hard-edged shape rather than an aura.
+    /// </summary>
+    public const float MinAuraSpread = 0.02f;
+
+    public const float MaxAuraSpread = 1f;
+
+    public static float ClampAuraSpread(float spread) => Mathf.Clamp(spread, MinAuraSpread, MaxAuraSpread);
 
     /// <summary>How far an outline extends past its icon, in pixels. Tunable live via <c>tint outline</c>.</summary>
     public static float OutlineThickness { get; set; } = DefaultOutlineThickness;
@@ -681,6 +780,9 @@ public static class PlayerTint
 
         /// <summary>The player's map-ink colour, for an icon outline.</summary>
         Outline,
+
+        /// <summary>The variation's key colour, for the glow behind a figure.</summary>
+        Aura,
     }
 
     private sealed class TintedNode(Color baseModulate, Player player, TintKind kind, Color baseInk, float activeAlpha)
@@ -708,6 +810,14 @@ public static class PlayerTint
     private static void Repaint(CanvasItem node, TintedNode entry)
     {
         var variation = For(entry.Player);
+
+        if (entry.Kind == TintKind.Aura)
+        {
+            AuraShader.SetColor(
+                node,
+                variation == null ? DormantAura : AuraFor(variation.Value, AuraStrength));
+            return;
+        }
 
         if (entry.Kind == TintKind.Outline)
         {
@@ -760,6 +870,11 @@ public static class PlayerTint
         }
 
         var variation = For(entry.Player);
+
+        if (entry.Kind == TintKind.Aura)
+        {
+            return variation == null ? DormantAura : AuraFor(variation.Value, AuraStrength);
+        }
 
         if (entry.Kind == TintKind.Outline)
         {

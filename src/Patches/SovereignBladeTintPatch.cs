@@ -30,6 +30,7 @@ public static class SovereignBladeTintPatch
         try
         {
             PlayerTint.Apply(__instance._spineNode, __instance._owner);
+            AuraLayer.Attach(__instance._spineNode, __instance._owner);
         }
         catch (Exception e)
         {

@@ -13,6 +13,10 @@ namespace MultiplayerColors.Patches;
 ///
 /// This survives <c>DoFightMove</c> swapping the texture between the pointing / rock / paper / scissors
 /// arms, since <c>Modulate</c> is independent of <c>Texture</c>.
+///
+/// The aura's frame does not: it is measured once, from wherever the first arm texture lands inside the
+/// 383x1072 rect this scene gives it (which is letterboxed — see <see cref="AuraBounds.DrawnRect" />).
+/// The four arms are the same shape at the same scale, so one measurement covers all of them.
 /// </remarks>
 [HarmonyPatch(typeof(NHandImage), nameof(NHandImage._Ready))]
 public static class TreasureHandTintPatch
@@ -23,6 +27,7 @@ public static class TreasureHandTintPatch
         try
         {
             PlayerTint.Apply(__instance._textureRect, __instance.Player);
+            AuraLayer.Attach(__instance._textureRect, __instance.Player);
         }
         catch (Exception e)
         {

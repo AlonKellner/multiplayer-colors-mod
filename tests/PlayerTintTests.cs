@@ -888,3 +888,328 @@ public class OutlineTests
         Assert.Equal(0f, PlayerTint.DormantOutline.A, 4);
     }
 }
+
+/// <summary>
+/// The aura: a faint coloured glow behind each tinted figure, keyed to the variation rather than to the
+/// character — white, black, red, blue.
+/// </summary>
+/// <remarks>
+/// The tint is a *relative* signal ("this Ironclad is a fifth brighter than that one") and any transform
+/// the game applies on top destroys it: NCombatRoom.PositionPlayersAndPets assigns Modulate = 0.5 grey to
+/// back-row players, so a brighter player in the back can read darker than a darker player in the front.
+/// The aura is the absolute signal underneath it — a white halo stays light and a black halo stays dark
+/// however the figure is dimmed.
+///
+/// As with <see cref="OutlineTests" />, only the colour derivation and the geometry are covered here.
+/// Building the ColorRect, measuring a live skeleton and assigning the shader uniform all need a Godot
+/// engine the bare host does not have, and are verified in game through <c>tint diag</c>.
+/// </remarks>
+public class AuraTests
+{
+    private static IEnumerable<PlayerVariation> AllVariations => Enum.GetValues<PlayerVariation>();
+
+    [Fact]
+    public void AuraColoursAreTheFourNamedColours()
+    {
+        Assert.Equal(Colors.White, PlayerTint.AuraColor(PlayerVariation.Brighter));
+        Assert.Equal(Colors.Black, PlayerTint.AuraColor(PlayerVariation.Darker));
+
+        var warm = PlayerTint.AuraColor(PlayerVariation.Warmer);
+        var cool = PlayerTint.AuraColor(PlayerVariation.Cooler);
+
+        Assert.True(warm.R > 0.8f && warm.G < 0.4f && warm.B < 0.4f, $"warmer should read as red, got #{warm.ToHtml(false)}");
+        Assert.True(cool.B > 0.8f && cool.R < 0.4f, $"cooler should read as blue, got #{cool.ToHtml(false)}");
+    }
+
+    [Theory]
+    [MemberData(nameof(ShiftTests.ShippedInks), MemberType = typeof(ShiftTests))]
+    public void AuraColourDoesNotDependOnTheCharacter(string character, string hex)
+    {
+        // The whole reason the aura exists: it has to survive transformations that destroy a relative
+        // signal, so it cannot itself be derived from the character's own colour the way map ink is.
+        _ = new Color(hex);
+
+        foreach (var v in AllVariations)
+        {
+            Assert.Equal(PlayerTint.AuraColor(v), PlayerTint.AuraColor(v));
+        }
+
+        Assert.Equal(Colors.White, PlayerTint.AuraColor(PlayerVariation.Brighter));
+    }
+
+    [Fact]
+    public void EveryPairOfAuraColoursIsPerceptuallyDistinct()
+    {
+        // Two players whose auras look alike is worse than no aura at all: it reads as a signal and says
+        // nothing. Measured in OKLab, the same scale the ink hue solver is tuned against.
+        var colours = AllVariations.Select(PlayerTint.AuraColor).ToList();
+
+        for (var i = 0; i < colours.Count; i++)
+        {
+            for (var j = i + 1; j < colours.Count; j++)
+            {
+                var distance = PlayerTint.PerceptualDistance(colours[i], colours[j]);
+                Assert.True(distance > 30f, $"auras {i} and {j} are only dE {distance:F1} apart");
+            }
+        }
+    }
+
+    [Fact]
+    public void BrighterAndDarkerAurasSitAtOppositeEndsOfLightness()
+    {
+        var brighter = PlayerTint.AuraColor(PlayerVariation.Brighter);
+        var darker = PlayerTint.AuraColor(PlayerVariation.Darker);
+
+        Assert.Equal(1f, brighter.V, 3);
+        Assert.Equal(0f, darker.V, 3);
+    }
+
+    [Fact]
+    public void WarmerAurasAreRedderAndCoolerAurasBluer()
+    {
+        // Must agree with the direction the sprite multiplier already moves: WarmerMul raises red and drops
+        // blue, CoolerMul does the reverse. An aura that disagreed with the tint would be a contradiction,
+        // not a reinforcement.
+        var warm = PlayerTint.AuraColor(PlayerVariation.Warmer);
+        var cool = PlayerTint.AuraColor(PlayerVariation.Cooler);
+
+        Assert.True(warm.R > warm.B, "the warmer aura is not red-dominant");
+        Assert.True(cool.B > cool.R, "the cooler aura is not blue-dominant");
+        Assert.True(warm.R > cool.R, "the warmer aura is not redder than the cooler one");
+        Assert.True(cool.B > warm.B, "the cooler aura is not bluer than the warmer one");
+    }
+
+    [Fact]
+    public void AnAuraCarriesTheRequestedStrengthAsItsAlpha()
+    {
+        foreach (var v in AllVariations)
+        {
+            var colour = PlayerTint.AuraFor(v, 0.25f);
+            var basis = PlayerTint.AuraColor(v);
+
+            Assert.Equal(0.25f, colour.A, 4);
+            Assert.Equal(basis.R, colour.R, 4);
+            Assert.Equal(basis.G, colour.G, 4);
+            Assert.Equal(basis.B, colour.B, 4);
+        }
+    }
+
+    [Fact]
+    public void AnAuraAtZeroStrengthIsInvisible()
+    {
+        // How `tint aura 0` turns the aura off without turning the tint off.
+        Assert.Equal(0f, PlayerTint.AuraFor(PlayerVariation.Warmer, 0f).A, 4);
+    }
+
+    [Fact]
+    public void AnInactiveAuraIsFullyTransparent()
+    {
+        // Auras did not exist in the vanilla game, so with no variation they disappear rather than fall
+        // back to a colour of their own — the same rule as an outline this mod created.
+        Assert.Equal(0f, PlayerTint.DormantAura.A, 4);
+    }
+
+    [Theory]
+    [InlineData(-1f, PlayerTint.MinAuraStrength)]
+    [InlineData(0f, 0f)]
+    [InlineData(0.3f, 0.3f)]
+    [InlineData(99f, PlayerTint.MaxAuraStrength)]
+    public void AuraStrengthIsClampedToZeroThroughOne(float requested, float expected)
+    {
+        Assert.Equal(expected, PlayerTint.ClampAuraStrength(requested), 4);
+    }
+
+    [Fact]
+    public void DefaultAuraStrengthIsSubtle()
+    {
+        // "Slight, and soft, not obviously perceptible" is the whole brief. A default that reads as a glow
+        // effect rather than a hint would fail it, and the console dial exists for the tuning pass.
+        Assert.InRange(PlayerTint.DefaultAuraStrength, 0.08f, 0.30f);
+    }
+
+    [Fact]
+    public void TheFalloffIsFullAtTheCentreAndZeroAtTheFrameEdge()
+    {
+        // Full in the middle, where the figure covers it, and gone by the frame edge — that occlusion is
+        // what turns a plain radial gradient into a halo that hugs the silhouette.
+        Assert.Equal(1f, AuraShader.Falloff(0f, AuraShader.Softness), 4);
+        Assert.Equal(0f, AuraShader.Falloff(1f, AuraShader.Softness), 4);
+        Assert.Equal(0f, AuraShader.Falloff(2f, AuraShader.Softness), 4);
+    }
+
+    [Fact]
+    public void TheFalloffNeverLeavesZeroToOne()
+    {
+        for (var d = -1f; d <= 2f; d += 0.05f)
+        {
+            Assert.InRange(AuraShader.Falloff(d, AuraShader.Softness), 0f, 1f);
+        }
+    }
+
+    [Fact]
+    public void TheFalloffDecreasesMonotonicallyOutward()
+    {
+        var previous = float.MaxValue;
+        for (var d = 0f; d <= 1f; d += 0.05f)
+        {
+            var value = AuraShader.Falloff(d, AuraShader.Softness);
+            Assert.True(value <= previous + 0.0001f, $"falloff rose at d={d:F2}");
+            previous = value;
+        }
+    }
+
+    [Fact]
+    public void TheFalloffIsSoftRatherThanAHardEdge()
+    {
+        // A linear ramp already looks like a lens flare at this size; the exponent is what makes it read as
+        // a haze. Halfway out it should have given up well over half its strength.
+        Assert.True(
+            AuraShader.Falloff(0.5f, AuraShader.Softness) < 0.5f,
+            "the falloff is not softened at all — softness is doing nothing");
+    }
+
+    [Fact]
+    public void TheFrameIsConcentricWithTheArt()
+    {
+        var bounds = new Rect2(new Vector2(-121f, -278f), new Vector2(242f, 278f));
+
+        var frame = AuraLayer.Frame(bounds, 0.25f);
+
+        Assert.Equal(bounds.GetCenter().X, frame.GetCenter().X, 3);
+        Assert.Equal(bounds.GetCenter().Y, frame.GetCenter().Y, 3);
+    }
+
+    [Fact]
+    public void TheFrameGrowsByTheSameAmountOnEveryEdge()
+    {
+        // Grown by a fraction of the SMALLER side, so the halo looks the same width on a 242px character
+        // box and on a 383px hand rather than stretching with the art's aspect.
+        var bounds = new Rect2(new Vector2(0f, 0f), new Vector2(200f, 400f));
+
+        var frame = AuraLayer.Frame(bounds, 0.25f);
+        var margin = 0.25f * 200f;
+
+        Assert.Equal(bounds.Position.X - margin, frame.Position.X, 3);
+        Assert.Equal(bounds.Position.Y - margin, frame.Position.Y, 3);
+        Assert.Equal(bounds.Size.X + 2f * margin, frame.Size.X, 3);
+        Assert.Equal(bounds.Size.Y + 2f * margin, frame.Size.Y, 3);
+    }
+
+    [Theory]
+    [InlineData(-1f, PlayerTint.MinAuraSpread)]
+    [InlineData(0.25f, 0.25f)]
+    [InlineData(99f, PlayerTint.MaxAuraSpread)]
+    public void SpreadIsClampedToARangeThatCannotLookBroken(float requested, float expected)
+    {
+        Assert.Equal(expected, PlayerTint.ClampAuraSpread(requested), 4);
+    }
+
+    [Fact]
+    public void DegenerateBoundsAreRejectedRatherThanDrawn()
+    {
+        // A skeleton that has not been posed yet reports an empty box. Drawing a frame around it would put
+        // a coloured dot at the character's origin, which is worse than nothing — and the diag line saying
+        // bounds=0x0 is how that gets noticed.
+        Assert.False(AuraLayer.IsMeasurable(new Rect2()));
+        Assert.False(AuraLayer.IsMeasurable(new Rect2(0f, 0f, 0.5f, 300f)));
+        Assert.False(AuraLayer.IsMeasurable(new Rect2(0f, 0f, -200f, 300f)));
+        Assert.False(AuraLayer.IsMeasurable(new Rect2(0f, 0f, float.NaN, 300f)));
+        Assert.False(AuraLayer.IsMeasurable(new Rect2(0f, 0f, 1e6f, 300f)));
+
+        Assert.True(AuraLayer.IsMeasurable(new Rect2(-121f, -278f, 242f, 278f)));
+    }
+
+    [Fact]
+    public void KeepAspectCentredArtIsMeasuredWhereItIsActuallyDrawn()
+    {
+        // hand_image.tscn's TextureRect is 383x1072 with expand_mode = 1 and stretch_mode = 5, so the arm
+        // is letterboxed inside a rect far taller than itself. Framing the raw rect would put the glow's
+        // peak off the bottom of the screen instead of around the hand.
+        var drawn = AuraBounds.DrawnRect(
+            new Vector2(383f, 1072f),
+            new Vector2(383f, 383f),
+            TextureRect.StretchModeEnum.KeepAspectCentered);
+
+        Assert.Equal(383f, drawn.Size.X, 3);
+        Assert.Equal(383f, drawn.Size.Y, 3);
+        Assert.Equal(0f, drawn.Position.X, 3);
+        Assert.Equal((1072f - 383f) / 2f, drawn.Position.Y, 3);
+    }
+
+    [Fact]
+    public void ArtThatFillsItsRectIsMeasuredAsTheWholeRect()
+    {
+        var size = new Vector2(100f, 250f);
+
+        var stretched = AuraBounds.DrawnRect(size, new Vector2(64f, 64f), TextureRect.StretchModeEnum.Scale);
+
+        Assert.Equal(new Rect2(Vector2.Zero, size), stretched);
+    }
+
+    [Fact]
+    public void ArtWithNoTextureFallsBackToTheWholeRect()
+    {
+        var size = new Vector2(100f, 250f);
+
+        Assert.Equal(
+            new Rect2(Vector2.Zero, size),
+            AuraBounds.DrawnRect(size, Vector2.Zero, TextureRect.StretchModeEnum.KeepAspectCentered));
+    }
+
+    [Fact]
+    public void TheShaderReplacesColourAndKeepsTheAncestorFade()
+    {
+        var code = AuraShader.Code;
+
+        Assert.Contains("shader_type canvas_item", code);
+        Assert.Contains($"uniform vec4 {AuraShader.ColorParameter} =", code);
+
+        // RGB comes from the uniform; COLOR.a carries whatever an ancestor is fading by, so a figure
+        // tweened out takes its aura with it.
+        Assert.Contains($"{AuraShader.ColorParameter}.rgb", code);
+        Assert.Contains("COLOR.a", code);
+    }
+
+    [Fact]
+    public void TheShaderDeclaresEveryUniformTheCSharpSetsByName()
+    {
+        // Both are written by string from C#; a name that drifts means the uniform silently keeps its
+        // default and the aura never changes.
+        Assert.Contains($"uniform vec4 {AuraShader.ColorParameter} =", AuraShader.Code);
+        Assert.Contains($"uniform float {AuraShader.SoftnessParameter} =", AuraShader.Code);
+    }
+
+    [Fact]
+    public void TheCSharpFalloffMirrorsTheOneInTheShader()
+    {
+        // AuraShader.Falloff is what the tests above actually exercise; the shader is what the player sees.
+        // Nothing but this stops the two drifting into different curves.
+        Assert.Contains("pow(clamp(1.0 - length(p), 0.0, 1.0), softness)", AuraShader.Code);
+    }
+
+    [Fact]
+    public void TheShaderDefaultSoftnessMatchesTheCSharpConstant()
+    {
+        // The uniform's default is what a material carries if SetShaderParameter is ever missed, so the two
+        // should not be able to disagree about what "soft" means.
+        Assert.Contains(
+            $"uniform float {AuraShader.SoftnessParameter} = {AuraShader.Softness:0.0}",
+            AuraShader.Code);
+    }
+
+    [Fact]
+    public void TheAuraUniformIsNotHintedAsASourceColour()
+    {
+        // Same trap the outline shader documents: ": source_color" makes Godot colour-convert on upload
+        // while Modulate is passed through raw, so the two disagree about what the colour is.
+        Assert.DoesNotContain("source_color", AuraShader.Code);
+    }
+
+    [Fact]
+    public void TheAuraIsDrawnBehindTheArtItBelongsTo()
+    {
+        // Stated as a constant rather than left to the node code, because the whole illusion depends on it:
+        // in front, the aura would wash the figure out instead of haloing it.
+        Assert.True(AuraLayer.DrawnBehindArt);
+    }
+}

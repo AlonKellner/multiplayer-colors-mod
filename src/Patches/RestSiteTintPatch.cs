@@ -39,6 +39,10 @@ public static class RestSiteTintPatch
                 if (child.GetClass() == "SpineSprite")
                 {
                     PlayerTint.Apply(child, player);
+
+                    // No bounds hint: %Hitbox is assigned in _Ready, which has not run yet at Create time.
+                    // The skeleton measures itself anyway, which is the better box of the two.
+                    AuraLayer.Attach(child, player);
                 }
             }
         }

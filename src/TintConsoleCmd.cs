@@ -35,13 +35,15 @@ public class TintConsoleCmd : AbstractConsoleCmd
 
     public override string CmdName => "tint";
 
-    public override string Args => "[" + string.Join("|", Options.Select(o => o.Name)) + "|outline <px>|icon <marker|character>|diag]";
+    public override string Args => "[" + string.Join("|", Options.Select(o => o.Name))
+        + "|outline <px>|aura <0-1>|aura spread <0-1>|icon <marker|character>|diag]";
 
     public override string Description =>
         "Multiplayer Colors: forces a player colour variation on yourself for testing, instead of only "
         + "tinting players who share a character. 'auto' restores normal behaviour, 'off' disables tinting. "
-        + "'outline <px>' sets icon outline thickness, 'icon' swaps the solo map pin for the co-op head "
-        + "icon, 'diag' reports what the mod has done. "
+        + "'outline <px>' sets icon outline thickness, 'aura' sets the strength of the glow behind "
+        + "tinted art, 'icon' swaps the solo map pin for the co-op head icon, 'diag' reports what the mod "
+        + "has done. "
         + "With no argument, reports the current setting.";
 
     public override bool IsNetworked => false;
@@ -58,6 +60,11 @@ public class TintConsoleCmd : AbstractConsoleCmd
         if (requested == "outline")
         {
             return Outline(args);
+        }
+
+        if (requested == "aura")
+        {
+            return Aura(args);
         }
 
         if (requested == "diag")
@@ -127,6 +134,75 @@ public class TintConsoleCmd : AbstractConsoleCmd
     }
 
     /// <summary>
+    /// <c>tint aura [strength]</c> / <c>tint aura spread [fraction]</c> — the two dials on the glow behind
+    /// tinted art.
+    /// </summary>
+    /// <remarks>
+    /// Both repaint what is already on screen. "Slight, and soft, not obviously perceptible" is not a
+    /// number anyone can pick from a text editor, so this exists for the same reason the tint's own
+    /// strength went through three live rounds before it read right: turn it up until it is unmistakable,
+    /// find the placement, then bring it back down.
+    /// </remarks>
+    private static CmdResult Aura(string[] args)
+    {
+        if (args.Length >= 2 && args[1].Trim().ToLowerInvariant() == "spread")
+        {
+            return Spread(args);
+        }
+
+        if (args.Length < 2)
+        {
+            return new CmdResult(success: true, AuraStatus());
+        }
+
+        if (!float.TryParse(args[1].Trim(), out var requested))
+        {
+            return new CmdResult(success: false, $"'{args[1]}' is not an aura strength between 0 and 1.");
+        }
+
+        PlayerTint.AuraStrength = PlayerTint.ClampAuraStrength(requested);
+        var repainted = PlayerTint.Refresh();
+
+        var clamped = Math.Abs(requested - PlayerTint.AuraStrength) > 0.001f
+            ? $" (clamped from {requested})"
+            : string.Empty;
+
+        return new CmdResult(
+            success: true,
+            $"tint aura: {PlayerTint.AuraStrength:F2}{clamped} — {repainted} node(s) repainted.");
+    }
+
+    private static CmdResult Spread(string[] args)
+    {
+        if (args.Length < 3)
+        {
+            return new CmdResult(success: true, AuraStatus());
+        }
+
+        if (!float.TryParse(args[2].Trim(), out var requested))
+        {
+            return new CmdResult(success: false, $"'{args[2]}' is not an aura spread between 0 and 1.");
+        }
+
+        PlayerTint.AuraSpread = PlayerTint.ClampAuraSpread(requested);
+        var resized = AuraLayer.RefreshSpread();
+
+        var clamped = Math.Abs(requested - PlayerTint.AuraSpread) > 0.001f
+            ? $" (clamped from {requested})"
+            : string.Empty;
+
+        return new CmdResult(
+            success: true,
+            $"tint aura spread: {PlayerTint.AuraSpread:F2}{clamped} — {resized} aura(s) resized.");
+    }
+
+    private static string AuraStatus() =>
+        $"tint aura: strength {PlayerTint.AuraStrength:F2} "
+        + $"(range {PlayerTint.MinAuraStrength}-{PlayerTint.MaxAuraStrength}, 0 hides it), "
+        + $"spread {PlayerTint.AuraSpread:F2} "
+        + $"(range {PlayerTint.MinAuraSpread}-{PlayerTint.MaxAuraSpread}, as a fraction of the figure).";
+
+    /// <summary>
     /// <c>tint icon [marker|character]</c> — swap the solo map marker for the co-op head icon.
     /// </summary>
     /// <remarks>
@@ -186,6 +262,7 @@ public class TintConsoleCmd : AbstractConsoleCmd
         {
             Status(),
             $"outline thickness: {PlayerTint.OutlineThickness}px",
+            AuraStatus(),
             $"diagnostic logging: {(Diagnostics.Enabled ? "on" : "off")}",
             $"sprites tracked: {PlayerTint.TrackedCount}",
         };
@@ -195,6 +272,12 @@ public class TintConsoleCmd : AbstractConsoleCmd
             ? "outlines live: none"
             : $"outlines live: {outlines.Count}");
         lines.AddRange(outlines.Select(l => "  " + l));
+
+        var auras = AuraLayer.Describe();
+        lines.Add(auras.Count == 0
+            ? "auras live: none — enter a room with a tinted figure"
+            : $"auras live: {auras.Count}");
+        lines.AddRange(auras.Select(l => "  " + l));
 
         var probe = MapInkProbe.Describe();
         lines.Add("map ink:");

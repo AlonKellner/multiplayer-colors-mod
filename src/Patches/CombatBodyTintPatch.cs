@@ -4,7 +4,8 @@ using MegaCrit.Sts2.Core.Nodes.Combat;
 namespace MultiplayerColors.Patches;
 
 /// <summary>
-/// Tints a player's body in combat, and their companions' — Osty, Byrdpip, Pael's Legion.
+/// Tints a player's body in combat, and their companions' — Osty, Byrdpip, Pael's Legion — and hangs the
+/// colour-key aura behind them.
 /// </summary>
 /// <remarks>
 /// A companion is a perfectly ordinary <c>Creature</c>: spawned via <c>PlayerCmd.AddPet&lt;T&gt;</c> through
@@ -52,6 +53,10 @@ public static class CombatBodyTintPatch
             }
 
             PlayerTint.Apply(__instance.Body, owner);
+
+            // %Bounds is assigned earlier in this same _Ready, so it is a live backstop by the time the
+            // aura goes looking for one — used only if the skeleton cannot measure itself.
+            AuraLayer.Attach(__instance.Body, owner, __instance.Bounds);
         }
         catch (Exception e)
         {
