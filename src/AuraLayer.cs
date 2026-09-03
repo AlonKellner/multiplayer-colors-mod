@@ -95,14 +95,17 @@ public static class AuraLayer
             ShowBehindParent = DrawnBehindArt,
             Texture = MoteTexture(),
 
-            // Local coordinates, and this is not a preference. Every number the motion carries is a
-            // fraction of the figure's radius as MEASURED IN THIS NODE'S OWN SPACE — a SpineSprite is
-            // scaled around 0.28, so a local unit is several screen pixels. In global mode Godot transforms
-            // emission positions and velocities by the node's transform but NOT accelerations, so the
-            // inward pull on the darker variation would come out several times stronger than the frame it
-            // was sized against. Local mode puts position, velocity and acceleration through the same
-            // transform, which is the only way the radius-relative maths stays coherent.
-            LocalCoords = true,
+            // Global coordinates: a mote is placed and launched from wherever the art is at the moment it
+            // spawns, and then lives its own life. Moving the art moves where the NEXT motes appear, not
+            // the ones already drifting — so the treasure-room arm, which follows its player's cursor, lays
+            // a trail rather than dragging a rigid cloud around with it.
+            //
+            // This was local until v0.1.37, and had to be: Godot transforms a particle's spawn position and
+            // velocity by the emitter's transform but not its ACCELERATIONS, and the motion model had
+            // accelerations in it. Now that a mote is only ever placed and launched, both of the quantities
+            // that survive are ones Godot transforms, and the one it does not — ScaleAmount — is corrected
+            // by hand in AuraParticles.ScaleFor.
+            LocalCoords = false,
 
             // Off until the figure has been measured; Configure switches it on with everything else set.
             Emitting = false,
@@ -252,6 +255,7 @@ public static class AuraLayer
                 $"{art.Name}[{host.Player.Character?.Id}]: "
                 + $"variation={PlayerTint.For(host.Player)?.ToString() ?? "none"} "
                 + $"bounds={host.Bounds.Size.X:F0}x{host.Bounds.Size.Y:F0} source={host.Source} "
+            + $"artscale={(GodotObject.IsInstanceValid(host.Art) && host.Art.IsInsideTree() ? AuraParticles.GlobalScale(host.Art.GetGlobalTransform()) : 1f):F2} "
                 + $"frame={host.Node.Size.X:F0}x{host.Node.Size.Y:F0} "
                 + $"want=#{expected.ToHtml()} got=#{actual.ToHtml()} "
                 + $"{(matches ? "MATCH" : "MISMATCH")} "

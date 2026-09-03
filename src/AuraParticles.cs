@@ -104,6 +104,37 @@ public static class AuraParticles
     /// </remarks>
     public static float Drift => SpawnSigma / Lifetime;
 
+    /// <summary>
+    /// The heading to hand the emitter so its motes travel <paramref name="screenDirection" /> ON SCREEN,
+    /// whatever the art they hang off is doing.
+    /// </summary>
+    /// <remarks>
+    /// Godot transforms a particle's velocity by the emitter's basis at spawn, so a heading handed over
+    /// raw is a heading in the art's own space — and three of the five surfaces this mod tints are not
+    /// upright in it. <c>NHandImage._Ready</c> rotates each player's arm by 0, ±90° or 180° so it reaches
+    /// in from a different side; <c>NRestSiteCharacter.FlipX</c> negates a spine node's <c>Scale.X</c>;
+    /// <c>NSovereignBladeVfx</c> tweens its sword's rotation as it attacks.
+    ///
+    /// Uncorrected, left-to-right would mean a different direction for each player, which is worse than no
+    /// key at all. Pre-multiplying by the inverse basis cancels the art's rotation, mirroring and scale, so
+    /// what Godot draws is the heading that was asked for.
+    /// </remarks>
+    public static Vector2 LocalHeading(Vector2 screenDirection, Transform2D artToScreen)
+    {
+        // A collapsed basis has no inverse. Better the uncorrected heading than a NaN, which Godot turns
+        // into particles that never move or never appear.
+        var determinant = (artToScreen.X.X * artToScreen.Y.Y) - (artToScreen.X.Y * artToScreen.Y.X);
+        if (MathF.Abs(determinant) < 1e-6f)
+        {
+            return screenDirection;
+        }
+
+        var basis = new Transform2D(artToScreen.X, artToScreen.Y, Vector2.Zero);
+        var local = basis.AffineInverse().BasisXform(screenDirection);
+
+        return local.LengthSquared() > 0f ? local.Normalized() : screenDirection;
+    }
+
     /// <summary>Turns a motion's radius fractions into the units the emitter actually works in.</summary>
     public static ParticleMotion Scale(ParticleMotion motion, float radius) =>
         motion with { Speed = motion.Speed * radius };
@@ -227,9 +258,21 @@ public static class AuraParticles
     ///
     /// Dividing by the texture's own resolution also decouples the two: the mote art can be made sharper
     /// without silently resizing every particle in the mod.
+    ///
+    /// <paramref name="globalScale" /> is there for a second asymmetry in the same property. With
+    /// <c>local_coords</c> off, Godot transforms a particle's spawn position and velocity by the emitter's
+    /// transform but leaves <c>ScaleAmount</c> in canvas units. A SpineSprite is scaled around 0.28, so a
+    /// mote sized against a radius measured in its local units comes out several times too large unless the
+    /// same factor is applied here by hand.
     /// </remarks>
-    public static float ScaleFor(float radius, float texturePixels) =>
-        texturePixels <= 0f ? 0f : PlayerTint.ClampParticleSize(PlayerTint.ParticleSize) * radius / texturePixels;
+    public static float ScaleFor(float radius, float texturePixels, float globalScale = 1f) =>
+        texturePixels <= 0f
+            ? 0f
+            : PlayerTint.ClampParticleSize(PlayerTint.ParticleSize) * radius * globalScale / texturePixels;
+
+    /// <summary>How much the art scales its own local units by, for quantities Godot will not transform.</summary>
+    public static float GlobalScale(Transform2D artToScreen) =>
+        0.5f * (artToScreen.X.Length() + artToScreen.Y.Length());
 
     /// <summary>Half the frame's smaller side — the distance speed and size are expressed against.</summary>
     public static float Radius(Rect2 frame) => 0.5f * MathF.Min(frame.Size.X, frame.Size.Y);
@@ -286,7 +329,12 @@ public static class AuraParticles
 
         // One heading, held. No acceleration of any kind: a drift that speeds up or curves is a second
         // reading laid over the first.
-        node.Direction = motion.Direction;
+        //
+        // Corrected into the art's own space so that what lands on screen is the heading asked for, whether
+        // or not the art is rotated or mirrored — which for the treasure-room arms and the rest-site
+        // figures it routinely is.
+        var artToScreen = node.IsInsideTree() ? node.GetGlobalTransform() : Transform2D.Identity;
+        node.Direction = LocalHeading(motion.Direction, artToScreen);
         node.Spread = 0f;
         node.InitialVelocityMin = motion.Speed * 0.8f;
         node.InitialVelocityMax = motion.Speed * 1.2f;
@@ -298,7 +346,7 @@ public static class AuraParticles
         node.DampingMin = 0f;
         node.DampingMax = 0f;
 
-        var drawn = ScaleFor(radius, TexturePixels);
+        var drawn = ScaleFor(radius, TexturePixels, GlobalScale(artToScreen));
         node.ScaleAmountMin = drawn * 0.6f;
         node.ScaleAmountMax = drawn * 1.4f;
 

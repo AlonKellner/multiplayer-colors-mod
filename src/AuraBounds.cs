@@ -41,6 +41,38 @@ public static class AuraBounds
     /// </summary>
     public static Rect2 Measure(CanvasItem art, Control? hint, out AuraBoundsSource source)
     {
+        return ClipToView(Locate(art, hint, out source), ViewInLocalSpace(art));
+    }
+
+    /// <summary>
+    /// The viewport in <paramref name="art" />'s own coordinates, or an unbounded rect when it cannot be
+    /// worked out — a node not yet in the tree, or a collapsed transform.
+    /// </summary>
+    /// <remarks>
+    /// Uses <c>GetGlobalTransformWithCanvas</c> rather than <c>GetGlobalTransform</c>: combat runs under a
+    /// Camera2D, so canvas coordinates and screen coordinates are not the same thing, and clipping against
+    /// the wrong one would trim figures that are perfectly visible.
+    /// </remarks>
+    private static Rect2 ViewInLocalSpace(CanvasItem art)
+    {
+        if (!art.IsInsideTree())
+        {
+            return Unbounded;
+        }
+
+        var toScreen = art.GetGlobalTransformWithCanvas();
+        var determinant = (toScreen.X.X * toScreen.Y.Y) - (toScreen.X.Y * toScreen.Y.X);
+
+        return MathF.Abs(determinant) < 1e-6f
+            ? Unbounded
+            : toScreen.AffineInverse() * art.GetViewportRect();
+    }
+
+    /// <summary>Large enough to clip nothing, small enough not to overflow when intersected.</summary>
+    private static readonly Rect2 Unbounded = new(-1e6f, -1e6f, 2e6f, 2e6f);
+
+    private static Rect2 Locate(CanvasItem art, Control? hint, out AuraBoundsSource source)
+    {
         // The tight, posed skeleton box. Preferred wherever it exists: it is the only source that describes
         // the figure rather than the space the scene reserved for it.
         if (art.HasMethod(SpineBoundsMethod))
@@ -73,6 +105,27 @@ public static class AuraBounds
 
         source = AuraBoundsSource.None;
         return new Rect2();
+    }
+
+    /// <summary>
+    /// Narrows a measured box to the part of it that is actually on screen.
+    /// </summary>
+    /// <remarks>
+    /// An aura is a halo, and a halo belongs around what you are looking at. Most art is wholly visible and
+    /// this changes nothing — but the treasure-room arm is 377x1072 and reaches in from off the edge of the
+    /// screen, with only its hand end in view. Framed whole, the aura's peak sits halfway down a forearm
+    /// nobody can see and the hand gets the tail: an alpha of about 0.009 where the aura's own strength is
+    /// 0.18. Clipped, the halo lands on the hand.
+    ///
+    /// Falls back to the full box rather than to nothing when the intersection is empty or a sliver, since
+    /// this is measured once and a figure may be off screen at that moment.
+    /// </remarks>
+    /// <param name="viewInLocal">The visible viewport, expressed in the art's own coordinates.</param>
+    public static Rect2 ClipToView(Rect2 bounds, Rect2 viewInLocal)
+    {
+        var visible = bounds.Intersection(viewInLocal);
+
+        return AuraLayer.IsMeasurable(visible) ? visible : bounds;
     }
 
     /// <summary>

@@ -137,6 +137,29 @@ entire point is not to have one.
 Deterministic from a fixed seed, and deliberately not drawn from `RunState.Rng`: every client must generate
 the same cloud, and a cosmetic effect has no business advancing a run's RNG stream.
 
+Motes live in **global coordinates**: one is placed and launched from wherever the art is at the moment it
+spawns, and then lives its own life. Moving the art moves where the *next* motes appear, not the ones
+already drifting — so the treasure-room arm, which follows its player's cursor, lays a trail rather than
+dragging a rigid cloud around with it.
+
+The heading is corrected into the art's own space first, so what lands on screen is the direction asked
+for. That is not optional: three of the five surfaces are not upright. `NHandImage._Ready` rotates each
+player's arm by 0, ±90° or 180° so it reaches in from a different side, `NRestSiteCharacter.FlipX` negates
+a spine node's `Scale.X`, and `NSovereignBladeVfx` tweens its sword's rotation as it attacks. Uncorrected,
+"left to right" would mean a different direction for each player — worse than no key at all.
+
+### Clipped to what is on screen
+
+The measured box is narrowed to the part of the art that is actually in view. Most art is wholly visible
+and this changes nothing, but the treasure-room arm is 377×1072 and reaches in from off the edge of the
+screen with only its hand end showing. Framed whole, the aura's peak sat halfway down a forearm nobody can
+see and the hand got the tail — an alpha of about 0.009 where the aura's own strength is 0.18. Clipped, the
+halo lands on the hand and the motes spawn there.
+
+The clip uses `GetGlobalTransformWithCanvas`, not `GetGlobalTransform`: combat runs under a `Camera2D`, so
+canvas coordinates and screen coordinates are not the same thing, and clipping against the wrong one would
+trim figures that are perfectly visible.
+
 Three more dials: `tint particles <0-4>` (a multiplier over the whole opacity table, so the effect can be
 pushed up to look at without disturbing the balance between the four), `tint particles count <n>` and
 `tint particles size <n>`.

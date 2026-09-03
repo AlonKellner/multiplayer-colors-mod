@@ -1340,6 +1340,140 @@ public class ParticleTests
         Assert.Equal(0f, AuraParticles.Scale(AuraParticles.MotionFor(PlayerVariation.Warmer), 0f).Speed, 4);
     }
 
+    // ---- the drift is in screen space, not the art's -----------------------------------------------
+
+    [Fact]
+    public void AnUprightUnscaledArtNeedsNoCorrection()
+    {
+        foreach (var v in AllVariations)
+        {
+            var screen = AuraParticles.MotionFor(v).Direction;
+
+            Assert.Equal(screen, AuraParticles.LocalHeading(screen, Transform2D.Identity));
+        }
+    }
+
+    [Theory]
+    [InlineData(90)]
+    [InlineData(-90)]
+    [InlineData(180)]
+    public void ARotatedArtDoesNotRotateTheDrift(int degrees)
+    {
+        // NHandImage._Ready rotates each player's arm by 0, +/-90 or 180 so it reaches in from a different
+        // side. Left-to-right has to stay left-to-right ON SCREEN, or the key means a different thing for
+        // each player — which is worse than no key at all.
+        var art = Transform2D.Identity.Rotated(Mathf.DegToRad(degrees));
+
+        foreach (var v in AllVariations)
+        {
+            var screen = AuraParticles.MotionFor(v).Direction;
+            var asDrawn = art.BasisXform(AuraParticles.LocalHeading(screen, art)).Normalized();
+
+            Assert.Equal(screen.X, asDrawn.X, 4);
+            Assert.Equal(screen.Y, asDrawn.Y, 4);
+        }
+    }
+
+    [Fact]
+    public void AMirroredArtDoesNotMirrorTheDrift()
+    {
+        // NRestSiteCharacter.FlipX negates the spine node's Scale.X, which would swap brighter and darker
+        // for whichever players are sitting the other way round the campfire.
+        var art = Transform2D.Identity.Scaled(new Vector2(-1f, 1f));
+        var screen = AuraParticles.MotionFor(PlayerVariation.Brighter).Direction;
+
+        var asDrawn = art.BasisXform(AuraParticles.LocalHeading(screen, art)).Normalized();
+
+        Assert.Equal(screen.X, asDrawn.X, 4);
+        Assert.Equal(screen.Y, asDrawn.Y, 4);
+    }
+
+    [Fact]
+    public void ScalingTheArtDoesNotBendTheDrift()
+    {
+        var art = Transform2D.Identity.Scaled(new Vector2(0.28f, 0.28f)).Rotated(0.7f);
+        var screen = AuraParticles.MotionFor(PlayerVariation.Cooler).Direction;
+
+        var asDrawn = art.BasisXform(AuraParticles.LocalHeading(screen, art)).Normalized();
+
+        Assert.Equal(screen.X, asDrawn.X, 3);
+        Assert.Equal(screen.Y, asDrawn.Y, 3);
+    }
+
+    [Fact]
+    public void ADegenerateTransformLeavesTheHeadingAlone()
+    {
+        // A collapsed basis has no inverse. Better the uncorrected heading than a NaN, which Godot would
+        // turn into particles that never move or never appear.
+        var collapsed = new Transform2D(Vector2.Zero, Vector2.Zero, Vector2.Zero);
+        var screen = AuraParticles.MotionFor(PlayerVariation.Warmer).Direction;
+
+        Assert.Equal(screen, AuraParticles.LocalHeading(screen, collapsed));
+    }
+
+    [Fact]
+    public void MoteSizeAccountsForTheArtsOwnScale()
+    {
+        // With LocalCoords off, Godot transforms a particle's spawn position and velocity by the emitter's
+        // transform but NOT its scale amount — that is left in canvas units. A SpineSprite is scaled around
+        // 0.28, so a mote sized against a radius measured in its local units would come out several times
+        // too large without this.
+        var big = AuraParticles.ScaleFor(400f, 32f, globalScale: 0.28f);
+        var small = AuraParticles.ScaleFor(112f, 32f, globalScale: 1f);
+
+        Assert.Equal(small, big, 3);
+    }
+
+    // ---- clipping to what is actually on screen ----------------------------------------------------
+
+    [Fact]
+    public void ArtThatFitsOnScreenIsNotClipped()
+    {
+        var bounds = new Rect2(-121f, -278f, 242f, 278f);
+        var view = new Rect2(-960f, -540f, 1920f, 1080f);
+
+        Assert.Equal(bounds, AuraBounds.ClipToView(bounds, view));
+    }
+
+    [Fact]
+    public void ArtRunningOffTheScreenIsMeasuredWhereItIsVisible()
+    {
+        // The treasure-room arm is 377x1072 and reaches in from off-screen, so all but its hand end is
+        // out of view. Framed whole, the aura's peak sits halfway down a forearm nobody can see and the
+        // hand gets the tail — an alpha of about 0.009 where the aura's own strength is 0.18.
+        var arm = new Rect2(3f, 0f, 377f, 1072f);
+        var view = new Rect2(-808f, -901f, 1920f, 1080f);
+
+        var visible = AuraBounds.ClipToView(arm, view);
+
+        Assert.Equal(3f, visible.Position.X, 3);
+        Assert.Equal(0f, visible.Position.Y, 3);
+        Assert.Equal(377f, visible.Size.X, 3);
+        Assert.Equal(179f, visible.Size.Y, 3);
+    }
+
+    [Fact]
+    public void ArtEntirelyOffScreenKeepsItsOwnBounds()
+    {
+        // Measured once, and a figure can be off screen at that moment. Its own box is a better guess than
+        // an empty one, and IsMeasurable would reject the empty one anyway.
+        var bounds = new Rect2(0f, 0f, 200f, 300f);
+        var view = new Rect2(5000f, 5000f, 1920f, 1080f);
+
+        Assert.Equal(bounds, AuraBounds.ClipToView(bounds, view));
+    }
+
+    [Fact]
+    public void ASliverOfVisibleArtIsNotWorthFramingOnItsOwn()
+    {
+        // A one-pixel intersection would put the entire aura into a sliver at the screen edge. IsMeasurable
+        // is the same floor used everywhere else for "this is not a real figure box".
+        var bounds = new Rect2(0f, 0f, 200f, 300f);
+        var view = new Rect2(-1920f, 299.5f, 1920f, 1080f);
+
+        Assert.Equal(bounds, AuraBounds.ClipToView(bounds, view));
+    }
+
     // ---- the spawn cloud -------------------------------------------------------------------------
 
     /// <summary>A frame deliberately not square, so a circular cloud would fail the shape tests.</summary>
