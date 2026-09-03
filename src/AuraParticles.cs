@@ -4,44 +4,35 @@ using Godot;
 namespace MultiplayerColors;
 
 /// <summary>
-/// How one variation's particles move once they exist. Every distance is a fraction of the figure's radius
-/// rather than a number of pixels, so the same description works on a combat body and on a Sovereign Blade
-/// — and, more to the point, survives being handed to a node living in a SpineSprite's local units, which
-/// are several times larger than a screen pixel.
+/// How one variation's particles move once they exist: a steady drift in one direction, and nothing else.
 /// </summary>
 /// <remarks>
-/// There is no emission shape here, and that is the point. Every variation spawns from the same cloud
-/// (<see cref="AuraParticles.SpawnCloud" />) and differs only in which way it is then pulled. Emission used
-/// to vary too — the inward variation was born on the rim rather than in the cloud — and that is what
-/// produced the swing-back: a particle launched at the rim reaches the middle with all the speed the pull
-/// gave it, sails through, and comes back out the far side.
+/// One kind of motion, four directions. This replaced a menagerie — radial pushes, an orbit, damping, a
+/// solved arrival time — and every one of those had its own way of going wrong, all of which reduced to
+/// the same root: motion defined relative to a centre has to reckon with what happens at the centre. A
+/// drift has no centre and so has nothing to reckon with.
+///
+/// <paramref name="Speed" /> is a fraction of the figure's radius per second rather than a pixel count, so
+/// the same description works on a combat body and on a Sovereign Blade — and survives being handed to a
+/// node living in a SpineSprite's local units, which are several times larger than a screen pixel.
 /// </remarks>
-/// <param name="RadialAccel">Acceleration away from the centre, in radii per second squared. Negative pulls inward.</param>
-/// <param name="LinearAccel">Constant acceleration in one direction, in radii per second squared. Godot's Y points down.</param>
-/// <param name="Orbit">
-/// Rotation about the centre, in full turns per second. An angular rate, so it is the one quantity here
-/// that is NOT a fraction of the radius — every mote circles at whatever radius it was born at, and none
-/// of them converges on anything.
-/// </param>
-/// <param name="Damping">Drag, in radii per second per second.</param>
+/// <param name="Direction">Which way the motes travel. A unit vector; Godot's Y axis points down.</param>
+/// <param name="Speed">How fast, in radii per second.</param>
 /// <param name="Lifetime">How long a mote lives, in seconds.</param>
 /// <param name="Opacity">The variation's own default opacity. Tuned per variation, not shared.</param>
 public readonly record struct ParticleMotion(
-    float RadialAccel,
-    Vector2 LinearAccel,
-    float Orbit,
-    float Damping,
+    Vector2 Direction,
+    float Speed,
     float Lifetime,
     float Opacity);
 
 /// <summary>
-/// A drift of motes alongside the aura, whose <em>motion</em> names the variation.
+/// A drift of motes alongside the aura, whose direction of travel names the variation.
 /// </summary>
 /// <remarks>
-/// Colour alone is uneven: a black aura on a dark battlefield is much weaker than a white one, and red and
-/// blue at low strength are the pair most easily confused. Motion is not — "pushed outward", "pulled
-/// inward", "rising", "falling" are four readings no background can flatten into one another. The two
-/// signals carry the same key by different means.
+/// Direction is the point. A black aura on a dark battlefield is the weakest of the four colours, but
+/// "these are moving left" reads regardless of what the background is doing — and the two variations you
+/// most need to tell apart are always the two travelling opposite ways.
 ///
 /// Built on <c>CpuParticles2D</c> rather than <c>GpuParticles2D</c>: every knob this needs is a plain
 /// property on the CPU node, and it matters that this mod compiles without the Godot SDK's source
@@ -53,120 +44,126 @@ public static class AuraParticles
     public const float TexturePixels = 32f;
 
     /// <summary>
-    /// The spread of the spawn cloud, as a fraction of the figure's radius. One standard deviation, so
-    /// roughly two thirds of the motes are born inside this and the tail reaches well past the figure.
+    /// The spread of the spawn cloud, as a fraction of each semi-axis. One standard deviation, so roughly
+    /// two thirds of the motes are born inside it and the rest fill the aura out to its edge.
     /// </summary>
     public const float SpawnSigma = 0.55f;
 
     /// <summary>
     /// How many distinct spawn positions the cloud offers. Independent of the particle count — the emitter
-    /// picks from these at random, so a hundred motes do not need a hundred points to look unrepeated.
+    /// picks from these at random, so fifty motes do not need fifty points to look unrepeated.
     /// </summary>
     public const int SpawnCloudPoints = 256;
 
     /// <summary>The seed for the cloud. Fixed, so every client in a lobby generates the same one.</summary>
     private const ulong SpawnSeed = 0x9E3779B97F4A7C15UL;
 
-    /// <summary>
-    /// The pull that names a variation. Everything below shares one spawn cloud and one lifetime shape;
-    /// only the direction of the pull differs.
-    /// </summary>
-    public static ParticleMotion MotionFor(PlayerVariation variation) => variation switch
-    {
-        // Pushed out of the cloud in every direction at once, so they stream past the figure's own outline.
-        PlayerVariation.Brighter => new(
-            RadialAccel: RadialPull,
-            LinearAccel: Vector2.Zero,
-            Orbit: 0f,
-            Damping: 0f,
-            Lifetime: Lifetime,
-            Opacity: 0.25f),
-
-        // Turning about the figure rather than falling into it. An angular rate is the one description of
-        // circular motion that needs no balancing act: every mote keeps the radius it was born at, so
-        // there is no arrival to time, nothing to overshoot, and nothing to damp. Constant tangential
-        // acceleration would spiral outward instead, and a real orbit cannot be held with constants —
-        // holding radius r at speed v needs v^2/r inward, and v grows.
-        PlayerVariation.Darker => new(
-            RadialAccel: 0f,
-            LinearAccel: Vector2.Zero,
-            Orbit: 0.14f,
-            Damping: 0f,
-            Lifetime: Lifetime,
-            Opacity: 1.00f),
-
-        // Sparks off a fire.
-        PlayerVariation.Warmer => new(
-            RadialAccel: 0f,
-            LinearAccel: new Vector2(0f, -0.22f),
-            Orbit: 0f,
-            Damping: 0f,
-            Lifetime: Lifetime,
-            Opacity: 0.50f),
-
-        // Snow. Slower than the sparks on purpose — it is the second thing separating the two linear
-        // motions, after their colour.
-        PlayerVariation.Cooler => new(
-            RadialAccel: 0f,
-            LinearAccel: new Vector2(0f, 0.10f),
-            Orbit: 0f,
-            Damping: 0f,
-            Lifetime: Lifetime,
-            Opacity: 0.50f),
-
-        _ => new(0f, Vector2.Zero, 0f, 0f, Lifetime, 0f),
-    };
-
     public const float Lifetime = 2.4f;
 
     /// <summary>
-    /// The radial push, in radii per second squared, that carries a mote one <see cref="SpawnSigma" /> over
-    /// one <see cref="Lifetime" />.
+    /// The direction that names a variation. Every variation shares one spawn cloud, one speed and one
+    /// lifetime; only the heading differs.
     /// </summary>
     /// <remarks>
-    /// Solved rather than picked: from <c>s = at²/2</c>, <c>a = 2s/t²</c>. Sized against the spawn cloud's
-    /// own spread so a mote covers about as much ground as the cloud is wide — enough to read as travelling
-    /// outward, not so much that it is off the frame before it has finished fading in.
+    /// Four headings on two axes, each the exact reverse of its opposite — brighter against darker, warmer
+    /// against cooler. That pairing is deliberate: the two you most need to tell apart are the two moving
+    /// in opposite directions, which is the largest difference two drifts can have.
     /// </remarks>
-    public static float RadialPull => 2f * SpawnSigma / (Lifetime * Lifetime);
-
-    /// <summary>
-    /// Turns a motion's radius fractions into the units the emitter actually works in.
-    /// </summary>
-    /// <remarks>
-    /// <see cref="ParticleMotion.Orbit" /> is deliberately untouched. It is turns per second, not a
-    /// distance, so scaling it would make a big figure's motes spin faster rather than wider.
-    /// </remarks>
-    public static ParticleMotion Scale(ParticleMotion motion, float radius) => motion with
+    public static ParticleMotion MotionFor(PlayerVariation variation) => variation switch
     {
-        RadialAccel = motion.RadialAccel * radius,
-        LinearAccel = motion.LinearAccel * radius,
-        Damping = motion.Damping * radius,
+        PlayerVariation.Brighter => new(Vector2.Right, Drift, Lifetime, Opacity: 0.25f),
+        PlayerVariation.Darker => new(Vector2.Left, Drift, Lifetime, Opacity: 1.00f),
+
+        // Godot's Y axis points down, so bottom-to-top is negative.
+        PlayerVariation.Warmer => new(Vector2.Up, Drift, Lifetime, Opacity: 0.50f),
+        PlayerVariation.Cooler => new(Vector2.Down, Drift, Lifetime, Opacity: 0.50f),
+
+        _ => new(Vector2.Zero, 0f, Lifetime, 0f),
     };
 
-    /// <summary>Where a variation's motes are born, before any pull is applied. The same for all four.</summary>
+    /// <summary>
+    /// How fast the motes drift, in radii per second: far enough to cross the cloud's own spread in one
+    /// lifetime.
+    /// </summary>
     /// <remarks>
-    /// A radial gaussian: angle uniform, offset normally distributed on each axis, so the cloud is dense at
-    /// the figure and thins outward with no edge anywhere. Godot's built-in shapes cannot do this — Sphere
-    /// is uniform through a disc and SphereSurface is a ring — so the points are generated here and handed
-    /// over as <c>EmissionShapeEnum.Points</c>.
+    /// Solved against the spawn cloud rather than picked, so the two stay in proportion if either is
+    /// retuned. Much slower and the drift reads as stillness; much faster and a mote is gone before it has
+    /// finished fading in.
+    /// </remarks>
+    public static float Drift => SpawnSigma / Lifetime;
+
+    /// <summary>Turns a motion's radius fractions into the units the emitter actually works in.</summary>
+    public static ParticleMotion Scale(ParticleMotion motion, float radius) =>
+        motion with { Speed = motion.Speed * radius };
+
+    /// <summary>Where a variation's motes are born, before they start drifting. The same for all four.</summary>
+    /// <remarks>
+    /// An elliptical gaussian, clipped to the ellipse: dense on the figure, thinning outward, and never
+    /// outside the aura it belongs to. It matches the aura's own shape by construction — the shader draws
+    /// its falloff in normalised UV, which is exactly the ellipse inscribed in this frame — so the motes
+    /// occupy the region that is glowing and no more.
+    ///
+    /// Godot's built-in shapes can do neither half: <c>Sphere</c> is uniform through a circle and
+    /// <c>SphereSurface</c> is a ring, and both are round whatever the frame's aspect. So the points are
+    /// generated here and handed over as <c>EmissionShapeEnum.Points</c>.
     ///
     /// Deterministic from a fixed seed, and deliberately not drawn from <c>RunState.Rng</c>: every client
-    /// must generate the same cloud, and a purely cosmetic effect has no business advancing a run's RNG
-    /// stream.
+    /// must generate the same cloud, and a purely cosmetic effect has no business advancing a run's stream.
     /// </remarks>
-    public static Vector2[] SpawnCloud(int count, float radius, float sigma, ulong seed)
+    /// <param name="halfExtents">Half the frame's width and height — the ellipse's two semi-axes.</param>
+    public static Vector2[] SpawnCloud(int count, Vector2 halfExtents, float sigma, ulong seed)
     {
         var points = new Vector2[Math.Max(count, 0)];
-        var spread = sigma * radius;
         var state = seed;
 
         for (var i = 0; i < points.Length; i++)
         {
-            points[i] = new Vector2(Gaussian(ref state) * spread, Gaussian(ref state) * spread);
+            points[i] = Draw(ref state, halfExtents, sigma);
         }
 
         return points;
+    }
+
+    /// <summary>One point inside the ellipse, by rejection: draw, and draw again if it landed outside.</summary>
+    /// <remarks>
+    /// A gaussian has infinite tails, so some draws always land outside — about a fifth at the sigma this
+    /// uses. Rejection keeps the distribution's shape, where clamping would pile the whole tail onto the
+    /// rim and read as a hard bright edge around an aura whose entire point is not to have one.
+    ///
+    /// The attempt cap is a termination guarantee, not a tuning knob: given a degenerate frame every draw
+    /// could be rejected forever. The centre is the one answer that is always inside.
+    /// </remarks>
+    private static Vector2 Draw(ref ulong state, Vector2 halfExtents, float sigma)
+    {
+        for (var attempt = 0; attempt < MaxSpawnAttempts; attempt++)
+        {
+            var point = new Vector2(
+                Gaussian(ref state) * sigma * halfExtents.X,
+                Gaussian(ref state) * sigma * halfExtents.Y);
+
+            if (IsInside(point, halfExtents))
+            {
+                return point;
+            }
+        }
+
+        return Vector2.Zero;
+    }
+
+    private const int MaxSpawnAttempts = 32;
+
+    /// <summary>Whether a point lies within the ellipse with these semi-axes.</summary>
+    public static bool IsInside(Vector2 point, Vector2 halfExtents)
+    {
+        if (halfExtents.X <= 0f || halfExtents.Y <= 0f)
+        {
+            return false;
+        }
+
+        var x = point.X / halfExtents.X;
+        var y = point.Y / halfExtents.Y;
+
+        return x * x + y * y <= 1f;
     }
 
     /// <summary>One draw from a standard normal, by the Box-Muller transform.</summary>
@@ -196,8 +193,8 @@ public static class AuraParticles
     /// </summary>
     /// <remarks>
     /// Per variation rather than shared, because the four are not equally visible at equal alpha. White
-    /// motes over a lit battlefield carry at a tenth; black ones need four times that to read against the
-    /// same background at all.
+    /// motes over a lit battlefield carry at a quarter; black ones need all of it to read against the same
+    /// background at all.
     /// </remarks>
     public static Color ColorFor(PlayerVariation variation, float scale)
     {
@@ -223,7 +220,7 @@ public static class AuraParticles
     public static float ScaleFor(float radius, float texturePixels) =>
         texturePixels <= 0f ? 0f : PlayerTint.ClampParticleSize(PlayerTint.ParticleSize) * radius / texturePixels;
 
-    /// <summary>Half the frame's smaller side — the distance everything is expressed against.</summary>
+    /// <summary>Half the frame's smaller side — the distance speed and size are expressed against.</summary>
     public static float Radius(Rect2 frame) => 0.5f * MathF.Min(frame.Size.X, frame.Size.Y);
 
     /// <summary>The frame each emitter was last sized against, so <see cref="Repaint" /> can rebuild it.</summary>
@@ -272,20 +269,23 @@ public static class AuraParticles
         // Started mid-life rather than empty, so walking into a room does not begin with a visible puff.
         node.Preprocess = motion.Lifetime;
 
-        // Every variation spawns identically: one radial gaussian, then pulled. Nothing is launched, so
-        // a particle only ever moves the way its own variation pulls it.
+        // Every variation spawns identically, inside the aura's own ellipse.
         node.EmissionShape = CpuParticles2D.EmissionShapeEnum.Points;
-        node.EmissionPoints = SpawnCloud(SpawnCloudPoints, radius, SpawnSigma, SpawnSeed);
+        node.EmissionPoints = SpawnCloud(SpawnCloudPoints, frame.Size / 2f, SpawnSigma, SpawnSeed);
 
-        node.InitialVelocityMin = 0f;
-        node.InitialVelocityMax = 0f;
-        node.RadialAccelMin = motion.RadialAccel * 0.8f;
-        node.RadialAccelMax = motion.RadialAccel * 1.2f;
-        node.Gravity = motion.LinearAccel;
-        node.OrbitVelocityMin = motion.Orbit * 0.8f;
-        node.OrbitVelocityMax = motion.Orbit * 1.2f;
-        node.DampingMin = motion.Damping * 0.8f;
-        node.DampingMax = motion.Damping * 1.2f;
+        // One heading, held. No acceleration of any kind: a drift that speeds up or curves is a second
+        // reading laid over the first.
+        node.Direction = motion.Direction;
+        node.Spread = 0f;
+        node.InitialVelocityMin = motion.Speed * 0.8f;
+        node.InitialVelocityMax = motion.Speed * 1.2f;
+        node.Gravity = Vector2.Zero;
+        node.RadialAccelMin = 0f;
+        node.RadialAccelMax = 0f;
+        node.OrbitVelocityMin = 0f;
+        node.OrbitVelocityMax = 0f;
+        node.DampingMin = 0f;
+        node.DampingMax = 0f;
 
         var drawn = ScaleFor(radius, TexturePixels);
         node.ScaleAmountMin = drawn * 0.6f;
@@ -303,8 +303,8 @@ public static class AuraParticles
     /// nothing.
     /// </summary>
     /// <remarks>
-    /// One ramp for all four. No variation converges on anything any more, so none of them needs a curve
-    /// timed to an arrival — they simply appear, drift, and go.
+    /// One ramp for all four. Nothing converges on anything, so none of them needs a curve timed to an
+    /// arrival — they appear, drift, and go.
     /// </remarks>
     private static Gradient Ramp() => new()
     {

@@ -96,50 +96,40 @@ Colour alone is uneven. A black aura on a dark battlefield is much weaker than a
 blue at low strength are the pair most easily confused. So each figure also carries a handful of motes
 whose **motion** says the same thing:
 
-| Variation | Motion | Opacity |
+| Variation | Drift | Opacity |
 |---|---|---|
-| Brighter | radially outward | 0.25 |
-| Darker | turning about the figure | 1.00 |
-| Warmer | up, like sparks off a fire | 0.50 |
-| Cooler | down, like snow | 0.50 |
+| Brighter | left to right | 0.25 |
+| Darker | right to left | 1.00 |
+| Warmer | bottom to top | 0.50 |
+| Cooler | top to bottom | 0.50 |
 
-Four readings no background can flatten into one another. Opacity is per variation rather than shared,
-because the four are not equally visible at equal alpha: white motes over a lit battlefield carry at a
-tenth where black ones need four times that to read at all.
+Four headings on two axes, each the exact reverse of its opposite. That pairing is deliberate: the two you
+most need to tell apart are the two moving in opposite directions, which is the largest difference two
+drifts can have, and the two pairs are perpendicular so no two of the four can be confused.
 
-**Every variation spawns identically and differs only in which way it is then pulled.** Nothing is
-launched, so a mote only ever moves the way its own variation pulls it. That is a fix, not a tidy-up:
-emission used to vary too — the inward variation was born on the rim rather than in the cloud — and a mote
-launched from the rim reaches the middle carrying all the speed the pull gave it, sails through, and swings
-back out the far side.
+**One kind of motion, four directions.** Every variation spawns identically and drifts at the same speed
+for the same lifetime; only the heading differs. That replaced a menagerie — radial pushes, an orbit,
+damping, a solved arrival time — every one of which had its own way of going wrong, all reducing to the
+same root: motion defined relative to a centre has to reckon with what happens at the centre. A drift has
+no centre and so has nothing to reckon with.
 
-The outward push is solved rather than picked: from `s = at²/2`, `a = 2σ/L²` carries a mote about as far as
-the cloud is wide over one lifetime — enough to read as travelling, not so far that it leaves the frame
-before it has finished fading in.
+Speed is solved against the spawn cloud rather than picked, so the two stay in proportion if either is
+retuned: a mote crosses the cloud's own spread in one lifetime. Much slower reads as stillness; much faster
+and a mote is gone before it has finished fading in.
 
-The turning one is an **angular rate** (`CpuParticles2D.OrbitVelocity`, in turns per second), not a force,
-and that is the whole reason it is well behaved: every mote keeps the radius it was born at, so there is no
-arrival to time, nothing to overshoot and nothing to damp. Constant tangential acceleration would spiral
-outward instead, and a real orbit cannot be held with constants — holding radius `r` at speed `v` needs
-`v²/r` inward, and `v` grows. It is also the one quantity here that is *not* scaled by the figure's radius:
-scaling turns-per-second would make a big figure's motes spin faster rather than wider.
+The spawn cloud is an **elliptical gaussian, clipped to the ellipse** — dense on the figure, thinning
+outward, and never outside the aura it belongs to. It matches the aura's shape by construction: the shader
+draws its falloff in normalised UV, which is exactly the ellipse inscribed in the same frame, so the motes
+occupy the region that is glowing and no more. Godot's built-in shapes can do neither half — `Sphere` is
+uniform through a circle and `SphereSurface` is a ring, and both are round whatever the frame's aspect — so
+the points are generated here and handed over as `EmissionShapeEnum.Points`.
 
-The spawn cloud is a **radial gaussian**: dense on the figure, thinning outward with no edge anywhere.
-Godot's built-in shapes cannot do that — `Sphere` is uniform through a disc and `SphereSurface` is a ring —
-so the points are generated here and handed over as `EmissionShapeEnum.Points`. Deterministic from a fixed
-seed, and deliberately not drawn from `RunState.Rng`: every client must generate the same cloud, and a
-cosmetic effect has no business advancing a run's RNG stream.
+Clipping is by *rejection*, not by clamping. A gaussian has infinite tails, so about a fifth of draws land
+outside; clamping would pile all of that onto the rim and read as a hard bright edge around an aura whose
+entire point is not to have one.
 
-They are `CpuParticles2D`, not `GpuParticles2D`: at a dozen particles the GPU path buys nothing and costs a
-`ParticleProcessMaterial` per figure, while every knob this needs is a plain property on the CPU node. The
-mote texture is a `GradientTexture2D` built in code — this mod ships no `.pck` and no assets, and without a
-texture Godot draws each particle as a hard-edged square.
-
-Every distance in the motion table is a fraction of the figure's radius rather than a pixel count, so one
-description covers a combat body and a Sovereign Blade alike. That also forces `local_coords`: Godot
-transforms emission positions and velocities by the emitter's transform but *not* accelerations, and a
-SpineSprite is scaled around 0.28, so in global mode the darker variation's inward pull would come out
-several times stronger than the frame it was sized against.
+Deterministic from a fixed seed, and deliberately not drawn from `RunState.Rng`: every client must generate
+the same cloud, and a cosmetic effect has no business advancing a run's RNG stream.
 
 Three more dials: `tint particles <0-4>` (a multiplier on each variation's own opacity, so "a bit more
 than that" is expressible without flattening the balance between the four), `tint particles count <n>` and

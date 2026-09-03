@@ -1215,15 +1215,14 @@ public class AuraTests
 }
 
 /// <summary>
-/// The particles that ride alongside the aura: a drift of motes whose <em>motion</em> names the variation,
-/// so the four are separable even where colour alone is weak.
+/// The particles that ride alongside the aura: a drift of motes whose direction of travel names the
+/// variation, so the four are separable even where colour alone is weak.
 /// </summary>
 /// <remarks>
-/// Motion is the point. A black aura on a dark battlefield is the weakest of the four colours, but
-/// "everything is being pulled inward" reads regardless of what the background is doing — and none of the
-/// four movements can be confused for another at a glance.
+/// Direction is the point. A black aura on a dark battlefield is the weakest of the four colours, but
+/// "these are moving left" reads regardless of what the background is doing.
 ///
-/// Everything here is the spawn cloud and the pull, which are pure maths. Building the CpuParticles2D and
+/// Everything here is the spawn cloud and the drift, which are pure maths. Building the CpuParticles2D and
 /// handing it those numbers needs an engine, and is verified in game through <c>tint diag</c>.
 /// </remarks>
 public class ParticleTests
@@ -1231,160 +1230,105 @@ public class ParticleTests
     private static IEnumerable<PlayerVariation> AllVariations => Enum.GetValues<PlayerVariation>();
 
     [Fact]
-    public void EveryVariationSpawnsFromTheSameCloud()
+    public void EveryVariationSpawnsFromTheSameCloudAndDiffersOnlyInHeading()
     {
-        // The one structural rule: spawn is shared and only the pull differs. It used to vary — the inward
-        // variation was born on the rim rather than in the cloud — and that is exactly what produced the
-        // swing-back, since a mote launched from the rim arrives at the middle carrying all the speed the
-        // pull gave it and sails straight through.
-        //
-        // ParticleMotion has no emission member to disagree about, so this pins the thing that would have
-        // to change first for that to come back.
-        Assert.DoesNotContain(
-            "Emission",
-            typeof(ParticleMotion).GetProperties().Select(p => p.Name));
+        // The one structural rule. Spawn used to vary, and so did the KIND of motion — a radial push, an
+        // orbit, damping, a solved arrival time — and every one of those had its own way of going wrong,
+        // all of which reduced to the same root: motion defined relative to a centre has to reckon with
+        // what happens at the centre. ParticleMotion now has nowhere to express any of that.
+        var members = typeof(ParticleMotion).GetProperties().Select(p => p.Name).ToList();
+
+        Assert.DoesNotContain("Emission", members);
+        Assert.DoesNotContain("RadialAccel", members);
+        Assert.DoesNotContain("Orbit", members);
+        Assert.DoesNotContain("Damping", members);
+
+        // One speed and one lifetime shared by all four; only Direction may differ.
+        Assert.Single(AllVariations.Select(v => AuraParticles.MotionFor(v).Speed).Distinct());
+        Assert.Single(AllVariations.Select(v => AuraParticles.MotionFor(v).Lifetime).Distinct());
+    }
+
+    [Theory]
+    [InlineData(PlayerVariation.Brighter, 1, 0)]
+    [InlineData(PlayerVariation.Darker, -1, 0)]
+    [InlineData(PlayerVariation.Warmer, 0, -1)]
+    [InlineData(PlayerVariation.Cooler, 0, 1)]
+    public void EachVariationDriftsItsOwnWay(PlayerVariation variation, int x, int y)
+    {
+        // Brighter left-to-right, darker right-to-left, warmer bottom-to-top, cooler top-to-bottom.
+        // Godot's Y axis points down, so "up" is negative.
+        Assert.Equal(new Vector2(x, y), AuraParticles.MotionFor(variation).Direction);
     }
 
     [Fact]
-    public void BrighterParticlesArePushedOutward()
+    public void OppositeVariationsDriftOppositeWays()
     {
-        var motion = AuraParticles.MotionFor(PlayerVariation.Brighter);
+        // The pairing is the point: the two you most need to tell apart are the two moving in opposite
+        // directions, which is the largest difference two drifts can have.
+        Assert.Equal(
+            -AuraParticles.MotionFor(PlayerVariation.Brighter).Direction,
+            AuraParticles.MotionFor(PlayerVariation.Darker).Direction);
 
-        Assert.True(motion.RadialAccel > 0f, "brighter motes should be pushed away from the centre");
-        Assert.Equal(Vector2.Zero, motion.LinearAccel);
+        Assert.Equal(
+            -AuraParticles.MotionFor(PlayerVariation.Warmer).Direction,
+            AuraParticles.MotionFor(PlayerVariation.Cooler).Direction);
     }
 
     [Fact]
-    public void DarkerParticlesTurnAroundTheCentre()
+    public void TheTwoPairsUseDifferentAxes()
     {
-        var motion = AuraParticles.MotionFor(PlayerVariation.Darker);
+        // Perpendicular, so no two of the four can be confused at a glance even out of the corner of an eye.
+        var brightness = AuraParticles.MotionFor(PlayerVariation.Brighter).Direction;
+        var warmth = AuraParticles.MotionFor(PlayerVariation.Warmer).Direction;
 
-        Assert.True(motion.Orbit != 0f, "darker motes should circle the figure");
-        Assert.Equal(0f, motion.RadialAccel, 4);
-        Assert.Equal(Vector2.Zero, motion.LinearAccel);
+        Assert.Equal(0f, brightness.Dot(warmth), 4);
     }
 
     [Fact]
-    public void OrbitIsAnAngularRateSoNothingConvergesOnTheCentre()
+    public void EveryHeadingIsAUnitVector()
     {
-        // Why this is expressed as turns per second rather than as a force. Every mote keeps the radius it
-        // was born at, so there is no arrival to time, nothing to overshoot and nothing to damp — the whole
-        // class of problem the inward pull had. Constant tangential acceleration would spiral outward
-        // instead, and a real orbit cannot be held with constants: holding radius r at speed v needs v^2/r
-        // inward, and v grows.
-        var motion = AuraParticles.MotionFor(PlayerVariation.Darker);
-
-        Assert.Equal(0f, motion.Damping, 4);
-        Assert.Equal(motion.Orbit, AuraParticles.Scale(motion, 500f).Orbit, 4);
-    }
-
-    [Fact]
-    public void OutwardMotesTravelAboutAsFarAsTheCloudIsWide()
-    {
-        // Far enough to read as travelling outward, not so far that a mote is off the frame before it has
-        // finished fading in. Solved from s = at^2 / 2 rather than picked.
-        var motion = AuraParticles.MotionFor(PlayerVariation.Brighter);
-        var travelled = 0.5f * motion.RadialAccel * motion.Lifetime * motion.Lifetime;
-
-        Assert.Equal(AuraParticles.SpawnSigma, travelled, 3);
-    }
-
-    [Fact]
-    public void NothingIsDampedNowThatNothingConverges()
-    {
-        // Damping existed solely to stop motes swinging about the centre they were being pulled into.
-        // Nothing is pulled anywhere any more, so nothing needs it.
+        // Direction carries no magnitude — Speed does, and it is shared. A heading that was quietly longer
+        // than the others would make one variation drift faster for no stated reason.
         foreach (var v in AllVariations)
         {
-            Assert.Equal(0f, AuraParticles.MotionFor(v).Damping, 4);
+            Assert.Equal(1f, AuraParticles.MotionFor(v).Direction.Length(), 4);
         }
     }
 
     [Fact]
-    public void WarmerParticlesRiseLikeSparks()
+    public void MotesCrossTheCloudsOwnSpreadOverTheirLife()
     {
-        var motion = AuraParticles.MotionFor(PlayerVariation.Warmer);
+        // Solved against the spawn cloud rather than picked, so the two stay in proportion if either is
+        // retuned. Much slower reads as stillness; much faster and a mote is gone before it has finished
+        // fading in.
+        var motion = AuraParticles.MotionFor(PlayerVariation.Brighter);
 
-        // Godot's Y axis points down.
-        Assert.True(motion.LinearAccel.Y < 0f, "warmer motes should rise");
-        Assert.Equal(0f, motion.RadialAccel, 4);
-        Assert.Equal(0f, motion.Orbit, 4);
+        Assert.Equal(AuraParticles.SpawnSigma, motion.Speed * motion.Lifetime, 3);
     }
 
     [Fact]
-    public void CoolerParticlesFallLikeSnow()
+    public void SpeedIsExpressedRelativeToTheFigureItSurrounds()
     {
+        // A fraction of the figure's radius, so the effect looks the same on a combat body and on a
+        // Sovereign Blade — and, more to the point, so it survives being measured in a SpineSprite's own
+        // local units, which are several times larger than a screen pixel.
         var motion = AuraParticles.MotionFor(PlayerVariation.Cooler);
 
-        Assert.True(motion.LinearAccel.Y > 0f, "cooler motes should fall");
-        Assert.Equal(0f, motion.RadialAccel, 4);
-        Assert.Equal(0f, motion.Orbit, 4);
+        Assert.Equal(
+            2f * AuraParticles.Scale(motion, 100f).Speed,
+            AuraParticles.Scale(motion, 200f).Speed,
+            3);
     }
 
     [Fact]
-    public void SnowFallsMoreSlowlyThanSparksRise()
-    {
-        // Red-on-dark and blue-on-dark are the pair most easily confused, so the two linear motions carry a
-        // second difference beyond their colour.
-        var sparks = AuraParticles.MotionFor(PlayerVariation.Warmer);
-        var snow = AuraParticles.MotionFor(PlayerVariation.Cooler);
-
-        Assert.True(MathF.Abs(snow.LinearAccel.Y) < MathF.Abs(sparks.LinearAccel.Y), "snow should drift");
-    }
-
-    [Fact]
-    public void EachVariationIsExactlyOneKindOfMotion()
-    {
-        // One unambiguous reading each. A mote both drifting up and creeping outward is two signals at
-        // once, which is none.
-        foreach (var v in AllVariations)
-        {
-            var motion = AuraParticles.MotionFor(v);
-            var kinds =
-                (MathF.Abs(motion.RadialAccel) > 0f ? 1 : 0)
-                + (motion.LinearAccel != Vector2.Zero ? 1 : 0)
-                + (MathF.Abs(motion.Orbit) > 0f ? 1 : 0);
-
-            Assert.True(kinds == 1, $"{v} has {kinds} kinds of motion; it should have exactly one");
-        }
-    }
-
-    [Fact]
-    public void EveryVariationMovesDifferently()
-    {
-        var motions = AllVariations.Select(AuraParticles.MotionFor).ToList();
-
-        Assert.Equal(motions.Count, motions.Distinct().Count());
-    }
-
-    [Fact]
-    public void MotionIsExpressedRelativeToTheFigureItSurrounds()
-    {
-        // Everything is a fraction of the figure's radius, so the effect looks the same on a combat body
-        // and on a Sovereign Blade — and, more to the point, so it survives being measured in a
-        // SpineSprite's own local units, which are several times larger than a screen pixel.
-        var motion = AuraParticles.MotionFor(PlayerVariation.Brighter) with
-        {
-            LinearAccel = new Vector2(0f, 0.2f),
-            Damping = 0.3f,
-        };
-
-        var small = AuraParticles.Scale(motion, 100f);
-        var large = AuraParticles.Scale(motion, 200f);
-
-        Assert.Equal(2f * small.RadialAccel, large.RadialAccel, 3);
-        Assert.Equal(2f * small.Damping, large.Damping, 3);
-        Assert.Equal(2f * small.LinearAccel.Y, large.LinearAccel.Y, 3);
-    }
-
-    [Fact]
-    public void ScalingLeavesTheShapeOfTheMotionAlone()
+    public void ScalingLeavesTheHeadingAlone()
     {
         foreach (var v in AllVariations)
         {
             var motion = AuraParticles.MotionFor(v);
             var scaled = AuraParticles.Scale(motion, 140f);
 
+            Assert.Equal(motion.Direction, scaled.Direction);
             Assert.Equal(motion.Lifetime, scaled.Lifetime, 3);
             Assert.Equal(motion.Opacity, scaled.Opacity, 3);
         }
@@ -1393,59 +1337,98 @@ public class ParticleTests
     [Fact]
     public void AFigureWithNoSizeProducesNoMotion()
     {
-        var scaled = AuraParticles.Scale(AuraParticles.MotionFor(PlayerVariation.Warmer), 0f);
-
-        Assert.Equal(0f, scaled.RadialAccel, 4);
-        Assert.Equal(Vector2.Zero, scaled.LinearAccel);
+        Assert.Equal(0f, AuraParticles.Scale(AuraParticles.MotionFor(PlayerVariation.Warmer), 0f).Speed, 4);
     }
 
     // ---- the spawn cloud -------------------------------------------------------------------------
 
-    private static Vector2[] Cloud(float radius = 100f) =>
-        AuraParticles.SpawnCloud(4000, radius, AuraParticles.SpawnSigma, seed: 12345UL);
+    /// <summary>A frame deliberately not square, so a circular cloud would fail the shape tests.</summary>
+    private static readonly Vector2 Half = new(120f, 200f);
+
+    private static Vector2[] Cloud(Vector2? half = null) =>
+        AuraParticles.SpawnCloud(4000, half ?? Half, AuraParticles.SpawnSigma, seed: 12345UL);
+
+    [Fact]
+    public void EveryMoteIsBornInsideTheAura()
+    {
+        // The cloud is clipped to the aura's own ellipse, so no mote appears anywhere that is not glowing.
+        Assert.All(Cloud(), p =>
+        {
+            Assert.True(AuraParticles.IsInside(p, Half), $"{p} is outside the aura");
+        });
+    }
+
+    [Fact]
+    public void TheSpawnCloudIsTheEllipseTheAuraDrawsAndNotACircle()
+    {
+        // The aura's shader draws its falloff in normalised UV, which is the ellipse inscribed in the
+        // frame. Godot's own shapes are round whatever the aspect, which is the whole reason these points
+        // are generated rather than described.
+        var points = Cloud();
+        var spreadX = MathF.Sqrt(points.Average(p => p.X * p.X));
+        var spreadY = MathF.Sqrt(points.Average(p => p.Y * p.Y));
+
+        Assert.Equal(Half.Y / Half.X, spreadY / spreadX, 1);
+    }
 
     [Fact]
     public void TheSpawnCloudThinsOutwardRatherThanFillingEvenly()
     {
-        // Radial gaussian, not uniform: thickest on the figure and thinning outward with no edge anywhere.
-        // Godot's own shapes cannot do this — Sphere is uniform through a disc, SphereSurface is a ring —
-        // which is why the points are generated rather than described.
+        // Gaussian, not uniform: thickest on the figure and thinning outward with no edge anywhere.
         //
         // Measured as DENSITY, not as a headcount. A ring's area grows with its radius, so a plain count
-        // per ring peaks around one sigma even for a perfect gaussian and says nothing about the shape.
-        // Density is what separates this from the uniform disc it replaced: uniform would be flat across
-        // every ring, and this has to fall.
-        var sigma = AuraParticles.SpawnSigma * 100f;
+        // per ring peaks partway out even for a perfect gaussian and says nothing about the shape. Density
+        // is what separates this from a uniform fill: uniform would be flat across every ring, and this
+        // has to fall.
         var points = Cloud();
 
         var densities = new List<float>();
         for (var ring = 0; ring < 3; ring++)
         {
-            var inner = ring * 0.6f * sigma;
-            var outer = inner + 0.6f * sigma;
-            var area = MathF.PI * (outer * outer - inner * inner);
+            var inner = ring / 3f;
+            var outer = inner + 1f / 3f;
 
-            densities.Add(points.Count(p => p.Length() >= inner && p.Length() < outer) / area);
+            // In normalised radius the ellipse is a unit circle, so ring area is proportional to r2^2-r1^2.
+            var area = outer * outer - inner * inner;
+            var count = points.Count(p =>
+            {
+                var r = new Vector2(p.X / Half.X, p.Y / Half.Y).Length();
+                return r >= inner && r < outer;
+            });
+
+            densities.Add(count / area);
         }
 
         for (var ring = 1; ring < densities.Count; ring++)
         {
             Assert.True(
                 densities[ring] < densities[ring - 1],
-                $"ring {ring} is denser than the one inside it ({densities[ring]:E2} vs {densities[ring - 1]:E2})");
+                $"ring {ring} is denser than the one inside it ({densities[ring]:F0} vs {densities[ring - 1]:F0})");
         }
     }
 
     [Fact]
-    public void TheSpawnCloudIsRadiallySymmetric()
+    public void TheSpawnCloudDoesNotPileUpOnTheRim()
     {
-        // "Radial" means no preferred direction: a cloud biased to one side would read as the figure
-        // leaning, which is a signal nobody asked for.
+        // Rejection rather than clamping. Clamping an infinite tail onto the boundary would put a fifth of
+        // every mote on the rim, which would read as a hard bright edge around an aura whose entire point
+        // is not to have one.
         var points = Cloud();
 
-        var sigma = AuraParticles.SpawnSigma * 100f;
-        Assert.InRange(points.Average(p => p.X), -0.05f * sigma, 0.05f * sigma);
-        Assert.InRange(points.Average(p => p.Y), -0.05f * sigma, 0.05f * sigma);
+        var onTheRim = points.Count(p => new Vector2(p.X / Half.X, p.Y / Half.Y).Length() > 0.98f);
+
+        Assert.True(onTheRim < points.Length / 50, $"{onTheRim} of {points.Length} motes are on the rim");
+    }
+
+    [Fact]
+    public void TheSpawnCloudIsSymmetric()
+    {
+        // No preferred direction: a cloud biased to one side would read as the figure leaning, which is a
+        // signal nobody asked for.
+        var points = Cloud();
+
+        Assert.InRange(points.Average(p => p.X), -0.05f * Half.X, 0.05f * Half.X);
+        Assert.InRange(points.Average(p => p.Y), -0.05f * Half.Y, 0.05f * Half.Y);
 
         var quadrants = new[]
         {
@@ -1459,21 +1442,10 @@ public class ParticleTests
     }
 
     [Fact]
-    public void TheSpawnCloudSpreadMatchesTheSigmaAskedFor()
-    {
-        var expected = AuraParticles.SpawnSigma * 100f;
-        var deviation = MathF.Sqrt(Cloud().Average(p => p.X * p.X));
-
-        // A sampled deviation is itself a random variable; a few percent either way is the sample, not a
-        // wrong sigma. Tight enough to catch a factor-of-two slip, loose enough not to fail on a Tuesday.
-        Assert.InRange(deviation, expected * 0.95f, expected * 1.05f);
-    }
-
-    [Fact]
     public void TheSpawnCloudScalesWithTheFigure()
     {
-        var small = MathF.Sqrt(Cloud(100f).Average(p => p.X * p.X));
-        var large = MathF.Sqrt(Cloud(200f).Average(p => p.X * p.X));
+        var small = MathF.Sqrt(Cloud(Half).Average(p => p.X * p.X));
+        var large = MathF.Sqrt(Cloud(Half * 2f).Average(p => p.X * p.X));
 
         // Exactly twice: the same seed gives the same draws, so only the scale differs.
         Assert.Equal(2f * small, large, 3);
@@ -1485,15 +1457,25 @@ public class ParticleTests
         // Deterministic from a fixed seed, and deliberately not drawn from RunState.Rng: every client must
         // generate the same cloud, and a purely cosmetic effect has no business advancing a run's stream.
         Assert.Equal(
-            AuraParticles.SpawnCloud(64, 100f, 0.5f, seed: 7UL),
-            AuraParticles.SpawnCloud(64, 100f, 0.5f, seed: 7UL));
+            AuraParticles.SpawnCloud(64, Half, 0.5f, seed: 7UL),
+            AuraParticles.SpawnCloud(64, Half, 0.5f, seed: 7UL));
     }
 
     [Fact]
     public void TheSpawnCloudProducesThePointsAskedFor()
     {
-        Assert.Equal(64, AuraParticles.SpawnCloud(64, 100f, 0.5f, seed: 1UL).Length);
-        Assert.Empty(AuraParticles.SpawnCloud(0, 100f, 0.5f, seed: 1UL));
+        Assert.Equal(64, AuraParticles.SpawnCloud(64, Half, 0.5f, seed: 1UL).Length);
+        Assert.Empty(AuraParticles.SpawnCloud(0, Half, 0.5f, seed: 1UL));
+    }
+
+    [Fact]
+    public void ADegenerateFrameStillTerminatesAndStaysAtTheCentre()
+    {
+        // Rejection sampling has to be able to give up: with no ellipse to land in, every draw is rejected.
+        // The centre is the one answer that is always inside a real one.
+        Assert.All(
+            AuraParticles.SpawnCloud(32, Vector2.Zero, AuraParticles.SpawnSigma, seed: 3UL),
+            p => Assert.Equal(Vector2.Zero, p));
     }
 
     [Fact]
@@ -1511,7 +1493,7 @@ public class ParticleTests
     public void EachVariationHasItsOwnOpacity()
     {
         // Not one shared number: the four are not equally visible at equal alpha. White motes over a lit
-        // battlefield carry at a tenth where black ones need four times that to read at all.
+        // battlefield carry at a quarter where black ones need all of it to read at all.
         Assert.Equal(0.25f, AuraParticles.MotionFor(PlayerVariation.Brighter).Opacity, 3);
         Assert.Equal(1.00f, AuraParticles.MotionFor(PlayerVariation.Darker).Opacity, 3);
         Assert.Equal(0.50f, AuraParticles.MotionFor(PlayerVariation.Warmer).Opacity, 3);
@@ -1638,8 +1620,8 @@ public class ParticleTests
     [Fact]
     public void ParticlesAreDrawnBehindTheArtLikeTheAura()
     {
-        // Emerging from behind the figure, and vanishing behind it on the way in, is what keeps this
-        // reading as something around the character rather than something in front of it.
+        // Drifting out from behind the figure is what keeps this reading as something around the character
+        // rather than something in front of it.
         Assert.True(AuraLayer.DrawnBehindArt);
     }
 }
