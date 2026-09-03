@@ -24,6 +24,8 @@ public static class AuraLayer
 {
     private const string NodeName = "MultiplayerColorsAura";
 
+    private const string ParticlesNodeName = "MultiplayerColorsAuraParticles";
+
     /// <summary>
     /// The aura is drawn behind its art, never in front.
     /// </summary>
@@ -37,10 +39,14 @@ public static class AuraLayer
     /// <summary>Auras created so far, keyed by the art they belong to. Weak keys — a freed node drops out.</summary>
     private static readonly ConditionalWeakTable<CanvasItem, AuraHost> Attached = new();
 
-    private sealed class AuraHost(CanvasItem art, ColorRect node, Player player)
+    private sealed class AuraHost(CanvasItem art, ColorRect node, CpuParticles2D motes, Player player)
     {
         public CanvasItem Art { get; } = art;
         public ColorRect Node { get; } = node;
+
+        /// <summary>The motes drifting around the figure, whose motion carries the same key as the glow.</summary>
+        public CpuParticles2D Motes { get; } = motes;
+
         public Player Player { get; set; } = player;
 
         /// <summary>The figure box, once something managed to measure it.</summary>
@@ -83,13 +89,35 @@ public static class AuraLayer
             Material = AuraShader.CreateMaterial(),
         };
 
-        var host = new AuraHost(art, aura, player);
+        var motes = new CpuParticles2D
+        {
+            Name = ParticlesNodeName,
+            ShowBehindParent = DrawnBehindArt,
+            Texture = MoteTexture(),
+
+            // Local coordinates, and this is not a preference. Every number the motion carries is a
+            // fraction of the figure's radius as MEASURED IN THIS NODE'S OWN SPACE — a SpineSprite is
+            // scaled around 0.28, so a local unit is several screen pixels. In global mode Godot transforms
+            // emission positions and velocities by the node's transform but NOT accelerations, so the
+            // inward pull on the darker variation would come out several times stronger than the frame it
+            // was sized against. Local mode puts position, velocity and acceleration through the same
+            // transform, which is the only way the radius-relative maths stays coherent.
+            LocalCoords = true,
+
+            // Off until the figure has been measured; Configure switches it on with everything else set.
+            Emitting = false,
+            Visible = false,
+        };
+
+        var host = new AuraHost(art, aura, motes, player);
         Attached.Add(art, host);
 
         art.AddChildSafely(aura);
         art.MoveChildSafely(aura, 0);
+        art.AddChildSafely(motes);
 
         PlayerTint.ApplyAura(aura, player);
+        PlayerTint.ApplyParticles(motes, player);
         Measure(host, hint);
     }
 
@@ -144,6 +172,11 @@ public static class AuraLayer
 
         host.Node.Position = frame.Position;
         host.Node.Size = frame.Size;
+
+        if (GodotObject.IsInstanceValid(host.Motes))
+        {
+            AuraParticles.SetFrame(host.Motes, frame, PlayerTint.For(host.Player));
+        }
     }
 
     /// <summary>
@@ -224,9 +257,54 @@ public static class AuraLayer
                 + $"{(matches ? "MATCH" : "MISMATCH")} "
                 + $"ancestors={(MapInkProbe.Accumulated(host.Node).IsEqualApprox(Colors.White) ? "none" : "#" + MapInkProbe.Accumulated(host.Node).ToHtml())} "
                 + $"shader={(AuraShader.HasShader(host.Node) ? "yes" : "NO")} "
-                + $"visible={host.Node.Visible && host.Node.IsVisibleInTree()}");
+                + $"visible={host.Node.Visible && host.Node.IsVisibleInTree()} "
+                + $"motes={DescribeMotes(host)}");
         }
 
         return lines;
     }
+
+    /// <summary>The particle half of an aura's diag line: are they on, how many, and moving which way.</summary>
+    private static string DescribeMotes(AuraHost host)
+    {
+        if (!GodotObject.IsInstanceValid(host.Motes))
+        {
+            return "gone";
+        }
+
+        if (!host.Motes.Emitting)
+        {
+            return "off";
+        }
+
+        return $"{host.Motes.Amount}@#{host.Motes.Color.ToHtml()} "
+            + $"dir={host.Motes.Direction.X:F1},{host.Motes.Direction.Y:F1} "
+            + $"spread={host.Motes.Spread:F0} v={host.Motes.InitialVelocityMax:F0} "
+            + $"radial={host.Motes.RadialAccelMax:F0} shape={host.Motes.EmissionShape} "
+            + $"visible={host.Motes.Visible && host.Motes.IsVisibleInTree()}";
+    }
+
+    /// <summary>
+    /// A soft round dot for the motes, generated rather than shipped — this mod has no <c>.pck</c> and no
+    /// assets of its own.
+    /// </summary>
+    /// <remarks>
+    /// Without a texture Godot draws each particle as a hard-edged square, which at this size reads as
+    /// grit rather than as a mote. One texture is shared by every emitter.
+    /// </remarks>
+    private static GradientTexture2D? _moteTexture;
+
+    private static GradientTexture2D MoteTexture() => _moteTexture ??= new GradientTexture2D
+    {
+        Width = 32,
+        Height = 32,
+        Fill = GradientTexture2D.FillEnum.Radial,
+        FillFrom = new Vector2(0.5f, 0.5f),
+        FillTo = new Vector2(0.5f, 1f),
+        Gradient = new Gradient
+        {
+            Offsets = [0f, 1f],
+            Colors = [Colors.White, new Color(1f, 1f, 1f, 0f)],
+        },
+    };
 }

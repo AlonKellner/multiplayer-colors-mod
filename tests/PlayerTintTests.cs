@@ -1213,3 +1213,198 @@ public class AuraTests
         Assert.True(AuraLayer.DrawnBehindArt);
     }
 }
+
+/// <summary>
+/// The particles that ride alongside the aura: a handful of drifting motes whose *motion* names the
+/// variation, so the four are separable even where colour alone is weak.
+/// </summary>
+/// <remarks>
+/// Motion is the point. A black aura on a dark battlefield is the weakest of the four colours, but
+/// "everything is being pulled inward" reads regardless of what the background is doing — and none of the
+/// four movements can be confused for another at a glance.
+///
+/// Everything here is the motion description, which is pure data. Building the CpuParticles2D and handing
+/// it those numbers needs an engine, and is verified in game through <c>tint diag</c>.
+/// </remarks>
+public class ParticleTests
+{
+    private static IEnumerable<PlayerVariation> AllVariations => Enum.GetValues<PlayerVariation>();
+
+    [Fact]
+    public void BrighterParticlesLeaveTheCentre()
+    {
+        var motion = AuraParticles.MotionFor(PlayerVariation.Brighter);
+
+        Assert.Equal(ParticleEmission.Centre, motion.Emission);
+        Assert.True(motion.Velocity > 0f, "brighter particles should be thrown outward");
+        Assert.True(motion.RadialAccel >= 0f, "brighter particles should not be pulled back in");
+    }
+
+    [Fact]
+    public void DarkerParticlesArriveAtTheCentre()
+    {
+        var motion = AuraParticles.MotionFor(PlayerVariation.Darker);
+
+        Assert.Equal(ParticleEmission.Edge, motion.Emission);
+        Assert.True(motion.RadialAccel < 0f, "darker particles should be drawn inward");
+    }
+
+    [Fact]
+    public void WarmerParticlesRiseLikeSparks()
+    {
+        var motion = AuraParticles.MotionFor(PlayerVariation.Warmer);
+
+        // Godot's Y axis points down, so up is negative on both counts.
+        Assert.True(motion.Direction.Y < 0f, "warmer particles should be launched upward");
+        Assert.True(motion.Gravity <= 0f, "warmer particles should not be pulled down");
+    }
+
+    [Fact]
+    public void CoolerParticlesFallLikeSnow()
+    {
+        var motion = AuraParticles.MotionFor(PlayerVariation.Cooler);
+
+        Assert.True(motion.Direction.Y > 0f, "cooler particles should drift downward");
+        Assert.True(motion.Gravity >= 0f, "cooler particles should settle rather than float");
+    }
+
+    [Fact]
+    public void SnowFallsMoreSlowlyThanSparksRise()
+    {
+        // The two linear motions have to be told apart by more than colour, since red-on-dark and
+        // blue-on-dark are the pair most likely to look alike at a glance.
+        var sparks = AuraParticles.MotionFor(PlayerVariation.Warmer);
+        var snow = AuraParticles.MotionFor(PlayerVariation.Cooler);
+
+        Assert.True(snow.Velocity < sparks.Velocity, "snow should drift, not shoot");
+    }
+
+    [Fact]
+    public void RadialVariationsSprayEveryWayAndLinearOnesDoNot()
+    {
+        foreach (var v in new[] { PlayerVariation.Brighter, PlayerVariation.Darker })
+        {
+            Assert.Equal(180f, AuraParticles.MotionFor(v).Spread, 3);
+        }
+
+        foreach (var v in new[] { PlayerVariation.Warmer, PlayerVariation.Cooler })
+        {
+            Assert.True(AuraParticles.MotionFor(v).Spread < 45f, $"{v} should read as one direction");
+        }
+    }
+
+    [Fact]
+    public void EveryVariationMovesDifferently()
+    {
+        // Four motions that a player could mistake for one another would be four decorations, not a key.
+        var motions = AllVariations.Select(AuraParticles.MotionFor).ToList();
+
+        Assert.Equal(motions.Count, motions.Distinct().Count());
+    }
+
+    [Fact]
+    public void InwardParticlesFadeInAndOutwardOnesFadeOut()
+    {
+        // Emitted at the frame edge and pulled in, they should arrive rather than appear: brightest as they
+        // converge on the figure, invisible where they were born.
+        Assert.True(AuraParticles.MotionFor(PlayerVariation.Darker).FadeIn);
+
+        foreach (var v in new[] { PlayerVariation.Brighter, PlayerVariation.Warmer, PlayerVariation.Cooler })
+        {
+            Assert.False(AuraParticles.MotionFor(v).FadeIn, $"{v} should fade out, not in");
+        }
+    }
+
+    [Fact]
+    public void MotionIsExpressedRelativeToTheFigureItSurrounds()
+    {
+        // Everything is a fraction of the figure's radius, so the effect looks the same on a 242px combat
+        // body and on a Sovereign Blade — and, more to the point, so it survives being measured in a
+        // SpineSprite's own local units, which are several times larger than a screen pixel.
+        var motion = AuraParticles.MotionFor(PlayerVariation.Brighter);
+
+        var small = AuraParticles.Scale(motion, 100f);
+        var large = AuraParticles.Scale(motion, 200f);
+
+        Assert.Equal(2f * small.Velocity, large.Velocity, 3);
+        Assert.Equal(2f * small.RadialAccel, large.RadialAccel, 3);
+        Assert.Equal(2f * small.Gravity, large.Gravity, 3);
+    }
+
+    [Fact]
+    public void ScalingLeavesTheShapeOfTheMotionAlone()
+    {
+        foreach (var v in AllVariations)
+        {
+            var motion = AuraParticles.MotionFor(v);
+            var scaled = AuraParticles.Scale(motion, 140f);
+
+            Assert.Equal(motion.Emission, scaled.Emission);
+            Assert.Equal(motion.Direction, scaled.Direction);
+            Assert.Equal(motion.Spread, scaled.Spread, 3);
+            Assert.Equal(motion.FadeIn, scaled.FadeIn);
+        }
+    }
+
+    [Fact]
+    public void AFigureWithNoSizeProducesNoMotion()
+    {
+        var scaled = AuraParticles.Scale(AuraParticles.MotionFor(PlayerVariation.Warmer), 0f);
+
+        Assert.Equal(0f, scaled.Velocity, 4);
+        Assert.Equal(0f, scaled.Gravity, 4);
+    }
+
+    [Fact]
+    public void ParticlesCarryTheSameColourAsTheAura()
+    {
+        // One key, two ways of reading it. A particle in a different colour from the glow it drifts through
+        // would split the signal in half.
+        foreach (var v in AllVariations)
+        {
+            Assert.Equal(PlayerTint.AuraColor(v), AuraParticles.ColorFor(v, 1f));
+            Assert.Equal(0.4f, AuraParticles.ColorFor(v, 0.4f).A, 4);
+        }
+    }
+
+    [Theory]
+    [InlineData(-1f, PlayerTint.MinParticleStrength)]
+    [InlineData(0f, 0f)]
+    [InlineData(0.5f, 0.5f)]
+    [InlineData(99f, PlayerTint.MaxParticleStrength)]
+    public void ParticleStrengthIsClampedToZeroThroughOne(float requested, float expected)
+    {
+        Assert.Equal(expected, PlayerTint.ClampParticleStrength(requested), 4);
+    }
+
+    [Fact]
+    public void DefaultParticleStrengthIsSubtle()
+    {
+        Assert.InRange(PlayerTint.DefaultParticleStrength, 0.10f, 0.45f);
+    }
+
+    [Theory]
+    [InlineData(-5, PlayerTint.MinParticleCount)]
+    [InlineData(0, 0)]
+    [InlineData(12, 12)]
+    [InlineData(9999, PlayerTint.MaxParticleCount)]
+    public void ParticleCountIsClampedToARangeThatStaysSubtle(int requested, int expected)
+    {
+        // Zero is allowed — it is how you keep the aura and drop the motes.
+        Assert.Equal(expected, PlayerTint.ClampParticleCount(requested));
+    }
+
+    [Fact]
+    public void DefaultParticleCountIsAHandfulRatherThanAnEffect()
+    {
+        Assert.InRange(PlayerTint.DefaultParticleCount, 4, 32);
+    }
+
+    [Fact]
+    public void ParticlesAreDrawnBehindTheArtLikeTheAura()
+    {
+        // Emerging from behind the figure, and vanishing behind it on the way in, is what keeps this
+        // reading as something around the character rather than something in front of it.
+        Assert.True(AuraLayer.DrawnBehindArt);
+    }
+}

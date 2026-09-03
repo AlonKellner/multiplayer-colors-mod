@@ -303,6 +303,12 @@ public static class PlayerTint
     public static void ApplyAura(CanvasItem? node, Player? player) =>
         Apply(node, player, TintKind.Aura, dormant: DormantAura);
 
+    /// <summary>
+    /// Registers a particle emitter so <see cref="Refresh" /> rebuilds it when the variation changes.
+    /// </summary>
+    public static void ApplyParticles(CanvasItem? node, Player? player) =>
+        Apply(node, player, TintKind.Particles, dormant: DormantAura);
+
     private static void Apply(
         CanvasItem? node,
         Player? player,
@@ -329,6 +335,7 @@ public static class PlayerTint
                 TintKind.SelfModulate => node.SelfModulate,
                 TintKind.Outline => dormant ?? DormantOutline,
                 TintKind.Aura => dormant ?? DormantAura,
+                TintKind.Particles => dormant ?? DormantAura,
                 _ => node.Modulate,
             };
 
@@ -527,6 +534,37 @@ public static class PlayerTint
     public const float MaxAuraSpread = 1f;
 
     public static float ClampAuraSpread(float spread) => Mathf.Clamp(spread, MinAuraSpread, MaxAuraSpread);
+
+    /// <summary>How opaque the aura's particles are drawn.</summary>
+    public static float ParticleStrength { get; set; } = DefaultParticleStrength;
+
+    /// <summary>
+    /// Higher than <see cref="DefaultAuraStrength" /> on purpose. A mote is a few pixels of a mostly empty
+    /// frame, so at the aura's strength it would not be there at all; what keeps the pair subtle is how few
+    /// of them there are, not how faint each one is.
+    /// </summary>
+    public const float DefaultParticleStrength = 0.28f;
+
+    public const float MinParticleStrength = 0f;
+
+    public const float MaxParticleStrength = 1f;
+
+    public static float ClampParticleStrength(float strength) =>
+        Mathf.Clamp(strength, MinParticleStrength, MaxParticleStrength);
+
+    /// <summary>How many particles each figure carries. Live via <c>tint particles count</c>.</summary>
+    public static int ParticleCount { get; set; } = DefaultParticleCount;
+
+    /// <summary>A handful. Enough to read the direction of travel, few enough not to look like a spell.</summary>
+    public const int DefaultParticleCount = 14;
+
+    /// <summary>Zero is allowed — it is how you keep the aura and drop the motes.</summary>
+    public const int MinParticleCount = 0;
+
+    /// <summary>A ceiling rather than a target: past this it stops being a hint and becomes weather.</summary>
+    public const int MaxParticleCount = 64;
+
+    public static int ClampParticleCount(int count) => Math.Clamp(count, MinParticleCount, MaxParticleCount);
 
     /// <summary>How far an outline extends past its icon, in pixels. Tunable live via <c>tint outline</c>.</summary>
     public static float OutlineThickness { get; set; } = DefaultOutlineThickness;
@@ -783,6 +821,9 @@ public static class PlayerTint
 
         /// <summary>The variation's key colour, for the glow behind a figure.</summary>
         Aura,
+
+        /// <summary>The variation's motion, for the motes drifting around a figure.</summary>
+        Particles,
     }
 
     private sealed class TintedNode(Color baseModulate, Player player, TintKind kind, Color baseInk, float activeAlpha)
@@ -810,6 +851,12 @@ public static class PlayerTint
     private static void Repaint(CanvasItem node, TintedNode entry)
     {
         var variation = For(entry.Player);
+
+        if (entry.Kind == TintKind.Particles)
+        {
+            AuraParticles.Repaint(node, variation);
+            return;
+        }
 
         if (entry.Kind == TintKind.Aura)
         {
@@ -870,6 +917,13 @@ public static class PlayerTint
         }
 
         var variation = For(entry.Player);
+
+        if (entry.Kind == TintKind.Particles)
+        {
+            return variation == null
+                ? DormantAura
+                : AuraParticles.ColorFor(variation.Value, ParticleStrength);
+        }
 
         if (entry.Kind == TintKind.Aura)
         {

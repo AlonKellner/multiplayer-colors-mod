@@ -36,14 +36,15 @@ public class TintConsoleCmd : AbstractConsoleCmd
     public override string CmdName => "tint";
 
     public override string Args => "[" + string.Join("|", Options.Select(o => o.Name))
-        + "|outline <px>|aura <0-1>|aura spread <0-1>|icon <marker|character>|diag]";
+        + "|outline <px>|aura <0-1>|aura spread <0-1>|particles <0-1>|particles count <n>"
+        + "|icon <marker|character>|diag]";
 
     public override string Description =>
         "Multiplayer Colors: forces a player colour variation on yourself for testing, instead of only "
         + "tinting players who share a character. 'auto' restores normal behaviour, 'off' disables tinting. "
         + "'outline <px>' sets icon outline thickness, 'aura' sets the strength of the glow behind "
-        + "tinted art, 'icon' swaps the solo map pin for the co-op head icon, 'diag' reports what the mod "
-        + "has done. "
+        + "tinted art, 'particles' the strength of the motes drifting around it, 'icon' swaps the solo map "
+        + "pin for the co-op head icon, 'diag' reports what the mod has done. "
         + "With no argument, reports the current setting.";
 
     public override bool IsNetworked => false;
@@ -65,6 +66,11 @@ public class TintConsoleCmd : AbstractConsoleCmd
         if (requested == "aura")
         {
             return Aura(args);
+        }
+
+        if (requested == "particles")
+        {
+            return Particles(args);
         }
 
         if (requested == "diag")
@@ -203,6 +209,72 @@ public class TintConsoleCmd : AbstractConsoleCmd
         + $"(range {PlayerTint.MinAuraSpread}-{PlayerTint.MaxAuraSpread}, as a fraction of the figure).";
 
     /// <summary>
+    /// <c>tint particles [strength]</c> / <c>tint particles count [n]</c> — the two dials on the motes.
+    /// </summary>
+    /// <remarks>
+    /// Separate from <c>tint aura</c> because they are separate signals that happen to share a colour: the
+    /// glow can be right while the motes are too busy, or the other way round, and tuning them together
+    /// would make each impossible to judge.
+    /// </remarks>
+    private static CmdResult Particles(string[] args)
+    {
+        if (args.Length >= 2 && args[1].Trim().ToLowerInvariant() == "count")
+        {
+            return ParticleCount(args);
+        }
+
+        if (args.Length < 2)
+        {
+            return new CmdResult(success: true, ParticleStatus());
+        }
+
+        if (!float.TryParse(args[1].Trim(), out var requested))
+        {
+            return new CmdResult(success: false, $"'{args[1]}' is not a particle strength between 0 and 1.");
+        }
+
+        PlayerTint.ParticleStrength = PlayerTint.ClampParticleStrength(requested);
+        var rebuilt = PlayerTint.Refresh();
+
+        var clamped = Math.Abs(requested - PlayerTint.ParticleStrength) > 0.001f
+            ? $" (clamped from {requested})"
+            : string.Empty;
+
+        return new CmdResult(
+            success: true,
+            $"tint particles: {PlayerTint.ParticleStrength:F2}{clamped} — {rebuilt} node(s) rebuilt.");
+    }
+
+    private static CmdResult ParticleCount(string[] args)
+    {
+        if (args.Length < 3)
+        {
+            return new CmdResult(success: true, ParticleStatus());
+        }
+
+        if (!int.TryParse(args[2].Trim(), out var requested))
+        {
+            return new CmdResult(success: false, $"'{args[2]}' is not a number of particles.");
+        }
+
+        PlayerTint.ParticleCount = PlayerTint.ClampParticleCount(requested);
+        var rebuilt = PlayerTint.Refresh();
+
+        var clamped = requested != PlayerTint.ParticleCount ? $" (clamped from {requested})" : string.Empty;
+
+        return new CmdResult(
+            success: true,
+            $"tint particles count: {PlayerTint.ParticleCount}{clamped} — {rebuilt} node(s) rebuilt.");
+    }
+
+    private static string ParticleStatus() =>
+        $"tint particles: strength {PlayerTint.ParticleStrength:F2} "
+        + $"(range {PlayerTint.MinParticleStrength}-{PlayerTint.MaxParticleStrength}, 0 hides them), "
+        + $"count {PlayerTint.ParticleCount} "
+        + $"(range {PlayerTint.MinParticleCount}-{PlayerTint.MaxParticleCount}). "
+        + "Brighter throws them outward, darker draws them in, warmer rises, cooler falls.";
+
+    /// <summary>
     /// <c>tint icon [marker|character]</c> — swap the solo map marker for the co-op head icon.
     /// </summary>
     /// <remarks>
@@ -263,6 +335,7 @@ public class TintConsoleCmd : AbstractConsoleCmd
             Status(),
             $"outline thickness: {PlayerTint.OutlineThickness}px",
             AuraStatus(),
+            ParticleStatus(),
             $"diagnostic logging: {(Diagnostics.Enabled ? "on" : "off")}",
             $"sprites tracked: {PlayerTint.TrackedCount}",
         };

@@ -37,7 +37,7 @@ Applied to:
 - the player's **map ink** and **map pings**
 - the **remote targeting line** drawn during another player's turn
 - a faint **aura** behind every one of those figures, in a colour that names the variation rather than the
-  character — white, black, red, blue
+  character — white, black, red, blue — and a handful of **particles** whose motion says the same thing
 
 
 Nothing else is touched. Anything mechanical stays vanilla: cards, Defect orbs and orb evocation, power and
@@ -90,6 +90,36 @@ answered is printed by `tint diag`, because "no aura" and "aura in the wrong pla
 
 Two dials, both live: `tint aura <0-1>` for strength and `tint aura spread <0-1>` for reach.
 
+### Particles
+
+Colour alone is uneven. A black aura on a dark battlefield is much weaker than a white one, and red and
+blue at low strength are the pair most easily confused. So each figure also carries a handful of motes
+whose **motion** says the same thing:
+
+| Variation | Motes |
+|---|---|
+| Brighter | thrown radially outward from the centre |
+| Darker | drawn radially inward, arriving on the figure |
+| Warmer | rising, like sparks off a fire |
+| Cooler | falling, like snow |
+
+Four readings no background can flatten into one another. The inward ones fade *in* rather than out, so
+they arrive rather than appear — invisible where they were born, brightest as they converge, gone behind
+the figure.
+
+They are `CpuParticles2D`, not `GpuParticles2D`: at a dozen particles the GPU path buys nothing and costs a
+`ParticleProcessMaterial` per figure, while every knob this needs is a plain property on the CPU node. The
+mote texture is a `GradientTexture2D` built in code — this mod ships no `.pck` and no assets, and without a
+texture Godot draws each particle as a hard-edged square.
+
+Every distance in the motion table is a fraction of the figure's radius rather than a pixel count, so one
+description covers a combat body and a Sovereign Blade alike. That also forces `local_coords`: Godot
+transforms emission positions and velocities by the emitter's transform but *not* accelerations, and a
+SpineSprite is scaled around 0.28, so in global mode the darker variation's inward pull would come out
+several times stronger than the frame it was sized against.
+
+Two more dials: `tint particles <0-1>` and `tint particles count <n>`.
+
 ## Mod support
 
 Modded characters work with no registration, no list to add to, and no per-character data in this mod.
@@ -131,6 +161,9 @@ tint outline 3      # set it, in pixels (0-12, default 3; 0 hides the outline)
 tint aura           # report aura strength and spread
 tint aura 0.18      # set the strength (0-1, default 0.18; 0 hides the aura)
 tint aura spread .25 # set how far it reaches past the figure
+tint particles      # report particle strength and count
+tint particles 0.28 # set the strength (0-1, default 0.28; 0 hides them)
+tint particles count 14
 tint icon           # report which art the solo map pin uses
 tint icon character # show the real co-op vote icon, to judge the multiplayer look solo
 tint icon marker    # back to the normal solo pin
@@ -147,7 +180,8 @@ this rides the solo marker as it hops between nodes.
 `tint diag` always writes its report to the game log as well as the console, so there is never
 anything to transcribe by hand. It prints one line per live aura — the measured figure box, which source
 measured it, the frame drawn, the colour wanted versus the colour that arrived, and whether the shader
-attached — and one line per live outline: the character's ink colour, the colour the outline
+attached, plus whether its motes are emitting and which way they are travelling — and one line per live
+outline: the character's ink colour, the colour the outline
 *should* be carrying, the colour it is *actually* carrying, whether the two match, and whether the
 silhouette shader is attached. If an outline ever looks wrong, that line says which half is at fault.
 
@@ -226,7 +260,8 @@ This is a DLL-only mod — no `.pck`, no Godot project, no export step, and no B
 `tests/` covers the two things that can break silently:
 
 - **`PlayerTintTests`** — the roster logic and the colour maths, including that assignment follows slot
-  index rather than list order, the outline key, and the aura's colours, falloff and framing.
+  index rather than list order, the outline key, the aura's colours, falloff and framing, and each
+  variation's particle motion.
 - **`TintConsoleCmdTests`** — the `tint` command's parsing, and that `TintOverride` stays aligned with
   `PlayerVariation` (they're bridged by an enum cast that would silently pick the wrong colour if they
   drifted apart).

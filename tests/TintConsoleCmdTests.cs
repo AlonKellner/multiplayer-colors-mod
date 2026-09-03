@@ -322,10 +322,103 @@ public class TintConsoleCmdTests : IDisposable
     }
 
     [Fact]
+    public void SetsTheParticleStrength()
+    {
+        try
+        {
+            var result = _cmd.Process(null, ["particles", "0.5"]);
+
+            Assert.True(result.success, result.msg);
+            Assert.Equal(0.5f, PlayerTint.ParticleStrength, 3);
+        }
+        finally
+        {
+            PlayerTint.ParticleStrength = PlayerTint.DefaultParticleStrength;
+        }
+    }
+
+    [Fact]
+    public void SetsTheParticleCount()
+    {
+        try
+        {
+            var result = _cmd.Process(null, ["particles", "count", "6"]);
+
+            Assert.True(result.success, result.msg);
+            Assert.Equal(6, PlayerTint.ParticleCount);
+            Assert.Equal(PlayerTint.DefaultParticleStrength, PlayerTint.ParticleStrength, 3);
+        }
+        finally
+        {
+            PlayerTint.ParticleCount = PlayerTint.DefaultParticleCount;
+        }
+    }
+
+    [Fact]
+    public void ClampsAnOutOfRangeParticleCount()
+    {
+        try
+        {
+            Assert.True(_cmd.Process(null, ["particles", "count", "5000"]).success);
+            Assert.Equal(PlayerTint.MaxParticleCount, PlayerTint.ParticleCount);
+        }
+        finally
+        {
+            PlayerTint.ParticleCount = PlayerTint.DefaultParticleCount;
+        }
+    }
+
+    [Fact]
+    public void ReportsTheParticlesWhenGivenNoNumber()
+    {
+        var result = _cmd.Process(null, ["particles"]);
+
+        Assert.True(result.success);
+        Assert.Contains("particles", result.msg, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RejectsAParticleStrengthThatIsNotANumber()
+    {
+        var before = PlayerTint.ParticleStrength;
+
+        var result = _cmd.Process(null, ["particles", "sparkly"]);
+
+        Assert.False(result.success);
+        Assert.Equal(before, PlayerTint.ParticleStrength, 3);
+    }
+
+    [Fact]
+    public void RejectsAParticleCountThatIsNotANumber()
+    {
+        var before = PlayerTint.ParticleCount;
+
+        var result = _cmd.Process(null, ["particles", "count", "lots"]);
+
+        Assert.False(result.success);
+        Assert.Equal(before, PlayerTint.ParticleCount);
+    }
+
+    [Fact]
+    public void ParticlesAreNotMistakenForAVariation()
+    {
+        PlayerTint.Override = TintOverride.Cooler;
+        try
+        {
+            _cmd.Process(null, ["particles", "0.3"]);
+            Assert.Equal(TintOverride.Cooler, PlayerTint.Override);
+        }
+        finally
+        {
+            PlayerTint.ParticleStrength = PlayerTint.DefaultParticleStrength;
+        }
+    }
+
+    [Fact]
     public void ArgsStringMentionsEverySubcommand()
     {
         // The usage line shown by `help` is the only place these are discoverable in game.
-        foreach (var sub in new[] { "outline", "icon", "aura", "diag" })
+        foreach (var sub in new[] { "outline", "icon", "aura", "particles", "diag" })
         {
             Assert.Contains(sub, _cmd.Args);
         }
