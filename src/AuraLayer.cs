@@ -278,9 +278,9 @@ public static class AuraLayer
         }
 
         return $"{host.Motes.Amount}@#{host.Motes.Color.ToHtml()} "
-            + $"dir={host.Motes.Direction.X:F1},{host.Motes.Direction.Y:F1} "
-            + $"spread={host.Motes.Spread:F0} v={host.Motes.InitialVelocityMax:F0} "
-            + $"radial={host.Motes.RadialAccelMax:F0} shape={host.Motes.EmissionShape} "
+            + $"radial={host.Motes.RadialAccelMax:F1} linear={host.Motes.Gravity.Y:F1} "
+            + $"damping={host.Motes.DampingMax:F1} life={host.Motes.Lifetime:F1}s "
+            + $"cloud={host.Motes.EmissionPoints.Length}pts "
             + $"scale={host.Motes.ScaleAmountMax:F2} "
             + $"drawn={host.Motes.ScaleAmountMax * AuraParticles.TexturePixels:F0}u "
             + $"visible={host.Motes.Visible && host.Motes.IsVisibleInTree()}";

@@ -535,19 +535,24 @@ public static class PlayerTint
 
     public static float ClampAuraSpread(float spread) => Mathf.Clamp(spread, MinAuraSpread, MaxAuraSpread);
 
-    /// <summary>How opaque the aura's particles are drawn.</summary>
+    /// <summary>
+    /// A multiplier on every variation's own particle opacity, not an opacity itself.
+    /// </summary>
+    /// <remarks>
+    /// The four are not equally visible at equal alpha — white motes over a lit battlefield carry at a
+    /// tenth where black ones need four times that — so each variation owns its own value in
+    /// <see cref="AuraParticles.MotionFor" />. This dial scales all four together, which is what makes
+    /// "a bit more than that" expressible without flattening the balance between them.
+    /// </remarks>
     public static float ParticleStrength { get; set; } = DefaultParticleStrength;
 
-    /// <summary>
-    /// Higher than <see cref="DefaultAuraStrength" /> on purpose. A mote is a few pixels of a mostly empty
-    /// frame, so at the aura's strength it would not be there at all; what keeps the pair subtle is how few
-    /// of them there are, not how faint each one is.
-    /// </summary>
-    public const float DefaultParticleStrength = 0.28f;
+    /// <summary>One: the per-variation opacities are the tuned values, and this leaves them alone.</summary>
+    public const float DefaultParticleStrength = 1f;
 
     public const float MinParticleStrength = 0f;
 
-    public const float MaxParticleStrength = 1f;
+    /// <summary>Above 1 is allowed, so a variation tuned low can still be pushed up to look at it.</summary>
+    public const float MaxParticleStrength = 4f;
 
     public static float ClampParticleStrength(float strength) =>
         Mathf.Clamp(strength, MinParticleStrength, MaxParticleStrength);
@@ -555,26 +560,33 @@ public static class PlayerTint
     /// <summary>How big a mote is drawn, as a fraction of the figure's radius.</summary>
     public static float ParticleSize { get; set; } = DefaultParticleSize;
 
-    /// <summary>A speck. Past roughly a tenth it stops reading as a mote and starts reading as an object.</summary>
-    public const float DefaultParticleSize = 0.022f;
+    /// <summary>
+    /// A mote as wide as the figure's radius. Large on paper, and correct in practice: the mote texture is
+    /// a radial gradient, so its visible core is a fraction of its quad, and at these opacities a hundred
+    /// large soft overlapping motes read as a haze around the figure rather than as a hundred objects.
+    /// </summary>
+    public const float DefaultParticleSize = 1f;
 
-    public const float MinParticleSize = 0.002f;
+    public const float MinParticleSize = 0f;
 
-    public const float MaxParticleSize = 0.15f;
+    public const float MaxParticleSize = 4f;
 
     public static float ClampParticleSize(float size) => Mathf.Clamp(size, MinParticleSize, MaxParticleSize);
 
     /// <summary>How many particles each figure carries. Live via <c>tint particles count</c>.</summary>
     public static int ParticleCount { get; set; } = DefaultParticleCount;
 
-    /// <summary>A handful. Enough to read the direction of travel, few enough not to look like a spell.</summary>
-    public const int DefaultParticleCount = 14;
+    /// <summary>
+    /// Enough to read as a medium rather than as a countable set of objects, which is what makes the
+    /// direction of travel legible without any single mote being noticeable.
+    /// </summary>
+    public const int DefaultParticleCount = 100;
 
     /// <summary>Zero is allowed — it is how you keep the aura and drop the motes.</summary>
     public const int MinParticleCount = 0;
 
-    /// <summary>A ceiling rather than a target: past this it stops being a hint and becomes weather.</summary>
-    public const int MaxParticleCount = 64;
+    /// <summary>A ceiling rather than a target, and generous — this is per figure, and they are cheap.</summary>
+    public const int MaxParticleCount = 400;
 
     public static int ClampParticleCount(int count) => Math.Clamp(count, MinParticleCount, MaxParticleCount);
 

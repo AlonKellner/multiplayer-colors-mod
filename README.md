@@ -96,16 +96,33 @@ Colour alone is uneven. A black aura on a dark battlefield is much weaker than a
 blue at low strength are the pair most easily confused. So each figure also carries a handful of motes
 whose **motion** says the same thing:
 
-| Variation | Motes |
-|---|---|
-| Brighter | thrown radially outward from the centre |
-| Darker | drawn radially inward, arriving on the figure |
-| Warmer | rising, like sparks off a fire |
-| Cooler | falling, like snow |
+| Variation | Pull | Opacity |
+|---|---|---|
+| Brighter | radially outward | 0.10 |
+| Darker | radially inward | 0.40 |
+| Warmer | up, like sparks off a fire | 0.20 |
+| Cooler | down, like snow | 0.20 |
 
-Four readings no background can flatten into one another. The inward ones fade *in* rather than out, so
-they arrive rather than appear — invisible where they were born, brightest as they converge, gone behind
-the figure.
+Four readings no background can flatten into one another. Opacity is per variation rather than shared,
+because the four are not equally visible at equal alpha: white motes over a lit battlefield carry at a
+tenth where black ones need four times that to read at all.
+
+**Every variation spawns identically and differs only in which way it is then pulled.** Nothing is
+launched, so a mote only ever moves the way its own variation pulls it. That is a fix, not a tidy-up:
+emission used to vary too — the inward variation was born on the rim rather than in the cloud — and a mote
+launched from the rim reaches the middle carrying all the speed the pull gave it, sails through, and swings
+back out the far side.
+
+The inward pull is solved rather than picked, so the fade and the arrival coincide: from `s = at²/2`,
+`a = 2σ/L²` carries a mote born one sigma out exactly to the middle over one lifetime. Motes born closer
+arrive early, and a radial pull keeps pointing at the centre after they pass it, so those would oscillate —
+which is what the damping is for. No other variation has a point it converges on, and none of them has any.
+
+The spawn cloud is a **radial gaussian**: dense on the figure, thinning outward with no edge anywhere.
+Godot's built-in shapes cannot do that — `Sphere` is uniform through a disc and `SphereSurface` is a ring —
+so the points are generated here and handed over as `EmissionShapeEnum.Points`. Deterministic from a fixed
+seed, and deliberately not drawn from `RunState.Rng`: every client must generate the same cloud, and a
+cosmetic effect has no business advancing a run's RNG stream.
 
 They are `CpuParticles2D`, not `GpuParticles2D`: at a dozen particles the GPU path buys nothing and costs a
 `ParticleProcessMaterial` per figure, while every knob this needs is a plain property on the CPU node. The
@@ -118,7 +135,13 @@ transforms emission positions and velocities by the emitter's transform but *not
 SpineSprite is scaled around 0.28, so in global mode the darker variation's inward pull would come out
 several times stronger than the frame it was sized against.
 
-Three more dials: `tint particles <0-1>`, `tint particles count <n>` and `tint particles size <n>`.
+Three more dials: `tint particles <0-4>` (a multiplier on each variation's own opacity, so "a bit more
+than that" is expressible without flattening the balance between the four), `tint particles count <n>` and
+`tint particles size <n>`.
+
+Size is a fraction of the figure's radius, and the default of 1 is larger than it sounds: the mote texture
+is a radial gradient, so its visible core is a fraction of its quad, and at these opacities a hundred large
+soft overlapping motes read as a haze around the figure rather than as a hundred objects.
 
 One trap worth naming, since it shipped once: `CpuParticles2D.ScaleAmount` is a *multiplier on the
 texture*, not a size in units. Handing it a radius-derived size blows a 32px texture up by the figure's
@@ -168,9 +191,9 @@ tint aura           # report aura strength and spread
 tint aura 0.18      # set the strength (0-1, default 0.18; 0 hides the aura)
 tint aura spread .25 # set how far it reaches past the figure
 tint particles      # report particle strength and count
-tint particles 0.28 # set the strength (0-1, default 0.28; 0 hides them)
-tint particles count 14
-tint particles size 0.022  # mote size, as a fraction of the figure (default 0.022)
+tint particles 1    # multiplier on every variation's own opacity (0-4, default 1)
+tint particles count 100
+tint particles size 1      # mote size, as a fraction of the figure's radius (default 1)
 tint icon           # report which art the solo map pin uses
 tint icon character # show the real co-op vote icon, to judge the multiplayer look solo
 tint icon marker    # back to the normal solo pin
