@@ -1243,9 +1243,10 @@ public class ParticleTests
         Assert.DoesNotContain("Orbit", members);
         Assert.DoesNotContain("Damping", members);
 
-        // One speed and one lifetime shared by all four; only Direction may differ.
+        // One speed, lifetime and opacity shared by all four; only Direction may differ.
         Assert.Single(AllVariations.Select(v => AuraParticles.MotionFor(v).Speed).Distinct());
         Assert.Single(AllVariations.Select(v => AuraParticles.MotionFor(v).Lifetime).Distinct());
+        Assert.Single(AllVariations.Select(v => AuraParticles.MotionFor(v).Opacity).Distinct());
     }
 
     [Theory]
@@ -1490,14 +1491,15 @@ public class ParticleTests
     // ---- colour and the dials --------------------------------------------------------------------
 
     [Fact]
-    public void EachVariationHasItsOwnOpacity()
+    public void EveryVariationIsDrawnAtTheSameOpacity()
     {
-        // Not one shared number: the four are not equally visible at equal alpha. White motes over a lit
-        // battlefield carry at a quarter where black ones need all of it to read at all.
-        Assert.Equal(0.25f, AuraParticles.MotionFor(PlayerVariation.Brighter).Opacity, 3);
-        Assert.Equal(1.00f, AuraParticles.MotionFor(PlayerVariation.Darker).Opacity, 3);
-        Assert.Equal(0.50f, AuraParticles.MotionFor(PlayerVariation.Warmer).Opacity, 3);
-        Assert.Equal(0.50f, AuraParticles.MotionFor(PlayerVariation.Cooler).Opacity, 3);
+        // One value across the board. It sat per variation for a while, on the theory that the four are
+        // not equally visible at equal alpha — and they are not — but four numbers to balance is four
+        // numbers to keep balanced, and the drift carries the reading on its own.
+        foreach (var v in AllVariations)
+        {
+            Assert.Equal(0.15f, AuraParticles.MotionFor(v).Opacity, 3);
+        }
     }
 
     [Fact]
@@ -1517,10 +1519,11 @@ public class ParticleTests
     }
 
     [Fact]
-    public void TheStrengthDialScalesEveryVariationsOwnOpacity()
+    public void TheStrengthDialScalesTheTunedOpacity()
     {
-        // A multiplier, not an opacity: "a bit more than that" has to be expressible without flattening the
-        // balance the four were tuned to.
+        // A multiplier, not an opacity: a variation can be pushed up to look at it without editing the
+        // tuned value it is pushing, and ParticleMotion.Opacity stays per-variation so splitting the four
+        // again is a one-line change.
         foreach (var v in AllVariations)
         {
             var own = AuraParticles.MotionFor(v).Opacity;

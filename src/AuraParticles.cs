@@ -61,8 +61,20 @@ public static class AuraParticles
     public const float Lifetime = 2.4f;
 
     /// <summary>
-    /// The direction that names a variation. Every variation shares one spawn cloud, one speed and one
-    /// lifetime; only the heading differs.
+    /// How opaque a mote is drawn, before the console's multiplier.
+    /// </summary>
+    /// <remarks>
+    /// One value for all four. It sat per variation for a while, on the theory that they are not equally
+    /// visible at equal alpha — and they are not — but four numbers to balance is four numbers to keep
+    /// balanced, and the drift now carries the reading on its own. <see cref="ParticleMotion.Opacity" />
+    /// stays a per-variation field so splitting them again is a one-line change, but nothing is asking for
+    /// it today.
+    /// </remarks>
+    public const float MoteOpacity = 0.15f;
+
+    /// <summary>
+    /// The direction that names a variation. Every variation shares one spawn cloud, one speed, one
+    /// lifetime and one opacity; only the heading differs.
     /// </summary>
     /// <remarks>
     /// Four headings on two axes, each the exact reverse of its opposite — brighter against darker, warmer
@@ -71,12 +83,12 @@ public static class AuraParticles
     /// </remarks>
     public static ParticleMotion MotionFor(PlayerVariation variation) => variation switch
     {
-        PlayerVariation.Brighter => new(Vector2.Right, Drift, Lifetime, Opacity: 0.25f),
-        PlayerVariation.Darker => new(Vector2.Left, Drift, Lifetime, Opacity: 1.00f),
+        PlayerVariation.Brighter => new(Vector2.Right, Drift, Lifetime, MoteOpacity),
+        PlayerVariation.Darker => new(Vector2.Left, Drift, Lifetime, MoteOpacity),
 
         // Godot's Y axis points down, so bottom-to-top is negative.
-        PlayerVariation.Warmer => new(Vector2.Up, Drift, Lifetime, Opacity: 0.50f),
-        PlayerVariation.Cooler => new(Vector2.Down, Drift, Lifetime, Opacity: 0.50f),
+        PlayerVariation.Warmer => new(Vector2.Up, Drift, Lifetime, MoteOpacity),
+        PlayerVariation.Cooler => new(Vector2.Down, Drift, Lifetime, MoteOpacity),
 
         _ => new(Vector2.Zero, 0f, Lifetime, 0f),
     };
@@ -192,9 +204,8 @@ public static class AuraParticles
     /// The particle colour: the aura's, at the variation's own opacity times the console's multiplier.
     /// </summary>
     /// <remarks>
-    /// Per variation rather than shared, because the four are not equally visible at equal alpha. White
-    /// motes over a lit battlefield carry at a quarter; black ones need all of it to read against the same
-    /// background at all.
+    /// The scale is the console's dial, so a variation can be pushed up to look at it without editing the
+    /// tuned value it is pushing.
     /// </remarks>
     public static Color ColorFor(PlayerVariation variation, float scale)
     {
