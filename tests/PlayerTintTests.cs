@@ -1243,10 +1243,9 @@ public class ParticleTests
         Assert.DoesNotContain("Orbit", members);
         Assert.DoesNotContain("Damping", members);
 
-        // One speed, lifetime and opacity shared by all four; only Direction may differ.
+        // One speed and one lifetime shared by all four; only the heading and the opacity weight differ.
         Assert.Single(AllVariations.Select(v => AuraParticles.MotionFor(v).Speed).Distinct());
         Assert.Single(AllVariations.Select(v => AuraParticles.MotionFor(v).Lifetime).Distinct());
-        Assert.Single(AllVariations.Select(v => AuraParticles.MotionFor(v).Opacity).Distinct());
     }
 
     [Theory]
@@ -1491,15 +1490,29 @@ public class ParticleTests
     // ---- colour and the dials --------------------------------------------------------------------
 
     [Fact]
-    public void EveryVariationIsDrawnAtTheSameOpacity()
+    public void EachVariationTakesItsOwnFractionOfTheBaseOpacity()
     {
-        // One value across the board. It sat per variation for a while, on the theory that the four are
-        // not equally visible at equal alpha — and they are not — but four numbers to balance is four
-        // numbers to keep balanced, and the drift carries the reading on its own.
-        foreach (var v in AllVariations)
-        {
-            Assert.Equal(0.15f, AuraParticles.MotionFor(v).Opacity, 3);
-        }
+        // The four are not equally visible at equal alpha: black over a lit battlefield needs about four
+        // times what white does to read at all.
+        Assert.Equal(0.15f * 0.25f, AuraParticles.MotionFor(PlayerVariation.Brighter).Opacity, 4);
+        Assert.Equal(0.15f * 1.00f, AuraParticles.MotionFor(PlayerVariation.Darker).Opacity, 4);
+        Assert.Equal(0.15f * 0.50f, AuraParticles.MotionFor(PlayerVariation.Warmer).Opacity, 4);
+        Assert.Equal(0.15f * 0.50f, AuraParticles.MotionFor(PlayerVariation.Cooler).Opacity, 4);
+    }
+
+    [Fact]
+    public void TheBaseOpacityMovesAllFourWithoutDisturbingTheirBalance()
+    {
+        // Why it is written as a base times a weight rather than as four independent numbers: the two
+        // answer different questions. The base is "how present should the motes be at all" — the number to
+        // move when the whole effect is too much — and the weights are "how do the four balance against
+        // each other", which should survive that move untouched.
+        var weights = AllVariations
+            .Select(v => AuraParticles.MotionFor(v).Opacity / AuraParticles.MoteOpacity)
+            .ToList();
+
+        Assert.Equal([0.25f, 1.00f, 0.50f, 0.50f], weights.Select(w => MathF.Round(w, 4)));
+        Assert.Equal(AuraParticles.MoteOpacity, weights.Max() * AuraParticles.MoteOpacity, 4);
     }
 
     [Fact]
@@ -1519,11 +1532,10 @@ public class ParticleTests
     }
 
     [Fact]
-    public void TheStrengthDialScalesTheTunedOpacity()
+    public void TheStrengthDialScalesEveryVariationsOwnOpacity()
     {
-        // A multiplier, not an opacity: a variation can be pushed up to look at it without editing the
-        // tuned value it is pushing, and ParticleMotion.Opacity stays per-variation so splitting the four
-        // again is a one-line change.
+        // A multiplier, not an opacity: the whole effect can be pushed up to look at it without editing
+        // the tuned values, and without flattening the balance between the four.
         foreach (var v in AllVariations)
         {
             var own = AuraParticles.MotionFor(v).Opacity;

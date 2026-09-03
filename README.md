@@ -96,23 +96,25 @@ Colour alone is uneven. A black aura on a dark battlefield is much weaker than a
 blue at low strength are the pair most easily confused. So each figure also carries a handful of motes
 whose **motion** says the same thing:
 
-| Variation | Drift |
-|---|---|
-| Brighter | left to right |
-| Darker | right to left |
-| Warmer | bottom to top |
-| Cooler | top to bottom |
+| Variation | Drift | Opacity |
+|---|---|---|
+| Brighter | left to right | 0.25 × base |
+| Darker | right to left | 1.00 × base |
+| Warmer | bottom to top | 0.50 × base |
+| Cooler | top to bottom | 0.50 × base |
 
-All four are drawn at the same opacity (0.15). It sat per variation for a while, on the theory that the
-four are not equally visible at equal alpha — and they are not — but four numbers to balance is four
-numbers to keep balanced, and the drift carries the reading on its own.
+Opacity is a base (0.15) times a per-variation weight, rather than four independent numbers, because the
+two answer different questions. The base is *how present should the motes be at all* — the number to move
+when the whole effect is too much or too little. The weights are *how do the four balance against each
+other*, and they hold because black over a lit battlefield needs about four times what white does to read
+at all. Moving the base leaves that balance intact.
 
 Four headings on two axes, each the exact reverse of its opposite. That pairing is deliberate: the two you
 most need to tell apart are the two moving in opposite directions, which is the largest difference two
 drifts can have, and the two pairs are perpendicular so no two of the four can be confused.
 
-**One kind of motion, four directions.** Every variation spawns identically and drifts at the same speed,
-for the same lifetime, at the same opacity; only the heading differs. That replaced a menagerie — radial pushes, an orbit,
+**One kind of motion, four directions.** Every variation spawns identically and drifts at the same speed
+for the same lifetime; only the heading and the opacity weight differ. That replaced a menagerie — radial pushes, an orbit,
 damping, a solved arrival time — every one of which had its own way of going wrong, all reducing to the
 same root: motion defined relative to a centre has to reckon with what happens at the centre. A drift has
 no centre and so has nothing to reckon with.
@@ -135,8 +137,9 @@ entire point is not to have one.
 Deterministic from a fixed seed, and deliberately not drawn from `RunState.Rng`: every client must generate
 the same cloud, and a cosmetic effect has no business advancing a run's RNG stream.
 
-Three more dials: `tint particles <0-4>` (a multiplier on the tuned opacity, so it can be pushed up to look
-at without editing the value it is pushing), `tint particles count <n>` and `tint particles size <n>`.
+Three more dials: `tint particles <0-4>` (a multiplier over the whole opacity table, so the effect can be
+pushed up to look at without disturbing the balance between the four), `tint particles count <n>` and
+`tint particles size <n>`.
 
 Size is a fraction of the figure's radius, and smaller on screen than it sounds: the mote texture is a
 radial gradient, so its visible core is a fraction of its quad.
@@ -189,7 +192,7 @@ tint aura           # report aura strength and spread
 tint aura 0.18      # set the strength (0-1, default 0.18; 0 hides the aura)
 tint aura spread .25 # set how far it reaches past the figure
 tint particles      # report particle strength and count
-tint particles 1    # multiplier on the tuned mote opacity of 0.15 (0-4, default 1)
+tint particles 1    # multiplier over the whole opacity table (0-4, default 1)
 tint particles count 50
 tint particles size 0.2    # mote size, as a fraction of the figure's radius (default 0.2)
 tint icon           # report which art the solo map pin uses
