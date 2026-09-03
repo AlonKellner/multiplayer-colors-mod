@@ -148,17 +148,13 @@ player's arm by 0, ±90° or 180° so it reaches in from a different side, `NRes
 a spine node's `Scale.X`, and `NSovereignBladeVfx` tweens its sword's rotation as it attacks. Uncorrected,
 "left to right" would mean a different direction for each player — worse than no key at all.
 
-### Clipped to what is on screen
-
-The measured box is narrowed to the part of the art that is actually in view. Most art is wholly visible
-and this changes nothing, but the treasure-room arm is 377×1072 and reaches in from off the edge of the
-screen with only its hand end showing. Framed whole, the aura's peak sat halfway down a forearm nobody can
-see and the hand got the tail — an alpha of about 0.009 where the aura's own strength is 0.18. Clipped, the
-halo lands on the hand and the motes spawn there.
-
-The clip uses `GetGlobalTransformWithCanvas`, not `GetGlobalTransform`: combat runs under a `Camera2D`, so
-canvas coordinates and screen coordinates are not the same thing, and clipping against the wrong one would
-trim figures that are perfectly visible.
+The frame is always the **whole** art, never the part of it currently on screen. Clipping to the viewport
+was tried, to put the treasure-room arm's halo on its hand rather than halfway down a forearm, and taken
+back out: the arm follows its player's cursor every frame, so a box measured once is stale the moment the
+hand moves — and a stale clip is worse than none, framing a sliver at the fingertips and leaving the rest
+of the visible arm bare. The whole art is a constant in the art's own space. It needs no re-measuring, and
+it rotates rigidly with the art, so the aura ellipse and the spawn ellipse turn with a tilting arm without
+ever deforming.
 
 Three more dials: `tint particles <0-4>` (a multiplier over the whole opacity table, so the effect can be
 pushed up to look at without disturbing the balance between the four), `tint particles count <n>` and
