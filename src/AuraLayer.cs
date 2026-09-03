@@ -279,7 +279,7 @@ public static class AuraLayer
 
         return $"{host.Motes.Amount}@#{host.Motes.Color.ToHtml()} "
             + $"radial={host.Motes.RadialAccelMax:F1} linear={host.Motes.Gravity.Y:F1} "
-            + $"damping={host.Motes.DampingMax:F1} life={host.Motes.Lifetime:F1}s "
+            + $"orbit={host.Motes.OrbitVelocityMax:F2}turn/s life={host.Motes.Lifetime:F1}s "
             + $"cloud={host.Motes.EmissionPoints.Length}pts "
             + $"scale={host.Motes.ScaleAmountMax:F2} "
             + $"drawn={host.Motes.ScaleAmountMax * AuraParticles.TexturePixels:F0}u "

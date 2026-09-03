@@ -18,12 +18,18 @@ namespace MultiplayerColors;
 /// </remarks>
 /// <param name="RadialAccel">Acceleration away from the centre, in radii per second squared. Negative pulls inward.</param>
 /// <param name="LinearAccel">Constant acceleration in one direction, in radii per second squared. Godot's Y points down.</param>
-/// <param name="Damping">Drag, in radii per second per second. What stops an arriving particle rather than letting it swing.</param>
+/// <param name="Orbit">
+/// Rotation about the centre, in full turns per second. An angular rate, so it is the one quantity here
+/// that is NOT a fraction of the radius — every mote circles at whatever radius it was born at, and none
+/// of them converges on anything.
+/// </param>
+/// <param name="Damping">Drag, in radii per second per second.</param>
 /// <param name="Lifetime">How long a mote lives, in seconds.</param>
 /// <param name="Opacity">The variation's own default opacity. Tuned per variation, not shared.</param>
 public readonly record struct ParticleMotion(
     float RadialAccel,
     Vector2 LinearAccel,
+    float Orbit,
     float Damping,
     float Lifetime,
     float Opacity);
@@ -69,56 +75,68 @@ public static class AuraParticles
     {
         // Pushed out of the cloud in every direction at once, so they stream past the figure's own outline.
         PlayerVariation.Brighter => new(
-            RadialAccel: InwardPull,
+            RadialAccel: RadialPull,
             LinearAccel: Vector2.Zero,
+            Orbit: 0f,
             Damping: 0f,
             Lifetime: Lifetime,
-            Opacity: 0.10f),
+            Opacity: 0.25f),
 
-        // Drawn in, and stopped when they get there. The pull is solved (see InwardPull) so that a mote
-        // born one sigma out reaches the middle exactly as its life ends and it finishes fading; the
-        // damping is what keeps the ones born closer, which arrive early, from swinging back out again.
+        // Turning about the figure rather than falling into it. An angular rate is the one description of
+        // circular motion that needs no balancing act: every mote keeps the radius it was born at, so
+        // there is no arrival to time, nothing to overshoot, and nothing to damp. Constant tangential
+        // acceleration would spiral outward instead, and a real orbit cannot be held with constants —
+        // holding radius r at speed v needs v^2/r inward, and v grows.
         PlayerVariation.Darker => new(
-            RadialAccel: -InwardPull,
+            RadialAccel: 0f,
             LinearAccel: Vector2.Zero,
-            Damping: 0.45f,
+            Orbit: 0.14f,
+            Damping: 0f,
             Lifetime: Lifetime,
-            Opacity: 0.40f),
+            Opacity: 1.00f),
 
         // Sparks off a fire.
         PlayerVariation.Warmer => new(
             RadialAccel: 0f,
             LinearAccel: new Vector2(0f, -0.22f),
+            Orbit: 0f,
             Damping: 0f,
             Lifetime: Lifetime,
-            Opacity: 0.20f),
+            Opacity: 0.50f),
 
         // Snow. Slower than the sparks on purpose — it is the second thing separating the two linear
         // motions, after their colour.
         PlayerVariation.Cooler => new(
             RadialAccel: 0f,
             LinearAccel: new Vector2(0f, 0.10f),
+            Orbit: 0f,
             Damping: 0f,
             Lifetime: Lifetime,
-            Opacity: 0.20f),
+            Opacity: 0.50f),
 
-        _ => new(0f, Vector2.Zero, 0f, Lifetime, 0f),
+        _ => new(0f, Vector2.Zero, 0f, 0f, Lifetime, 0f),
     };
 
     public const float Lifetime = 2.4f;
 
     /// <summary>
-    /// The radial pull, in radii per second squared, that carries a mote born one <see cref="SpawnSigma" />
-    /// from the middle exactly to it over one <see cref="Lifetime" />.
+    /// The radial push, in radii per second squared, that carries a mote one <see cref="SpawnSigma" /> over
+    /// one <see cref="Lifetime" />.
     /// </summary>
     /// <remarks>
-    /// Solved rather than picked, because this is precisely what "fade and disappear when they reach the
-    /// centre" means: from <c>s = at²/2</c>, <c>a = 2s/t²</c>. Get it wrong in one direction and the motes
-    /// pile up in the middle and swing; wrong in the other and they never arrive.
+    /// Solved rather than picked: from <c>s = at²/2</c>, <c>a = 2s/t²</c>. Sized against the spawn cloud's
+    /// own spread so a mote covers about as much ground as the cloud is wide — enough to read as travelling
+    /// outward, not so much that it is off the frame before it has finished fading in.
     /// </remarks>
-    public static float InwardPull => 2f * SpawnSigma / (Lifetime * Lifetime);
+    public static float RadialPull => 2f * SpawnSigma / (Lifetime * Lifetime);
 
-    /// <summary>Turns a motion's radius fractions into the units the emitter actually works in.</summary>
+    /// <summary>
+    /// Turns a motion's radius fractions into the units the emitter actually works in.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ParticleMotion.Orbit" /> is deliberately untouched. It is turns per second, not a
+    /// distance, so scaling it would make a big figure's motes spin faster rather than wider.
+    /// </remarks>
     public static ParticleMotion Scale(ParticleMotion motion, float radius) => motion with
     {
         RadialAccel = motion.RadialAccel * radius,
@@ -264,6 +282,8 @@ public static class AuraParticles
         node.RadialAccelMin = motion.RadialAccel * 0.8f;
         node.RadialAccelMax = motion.RadialAccel * 1.2f;
         node.Gravity = motion.LinearAccel;
+        node.OrbitVelocityMin = motion.Orbit * 0.8f;
+        node.OrbitVelocityMax = motion.Orbit * 1.2f;
         node.DampingMin = motion.Damping * 0.8f;
         node.DampingMax = motion.Damping * 1.2f;
 
@@ -283,9 +303,8 @@ public static class AuraParticles
     /// nothing.
     /// </summary>
     /// <remarks>
-    /// One ramp for all four now. The inward variation used to have its own, brightest at the end, which
-    /// was the wrong half of the problem: what it needed was not to be bright on arrival but to be gone
-    /// there, and <see cref="InwardPull" /> is what makes the fade and the arrival coincide.
+    /// One ramp for all four. No variation converges on anything any more, so none of them needs a curve
+    /// timed to an arrival — they simply appear, drift, and go.
     /// </remarks>
     private static Gradient Ramp() => new()
     {

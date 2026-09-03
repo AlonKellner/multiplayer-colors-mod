@@ -560,12 +560,8 @@ public static class PlayerTint
     /// <summary>How big a mote is drawn, as a fraction of the figure's radius.</summary>
     public static float ParticleSize { get; set; } = DefaultParticleSize;
 
-    /// <summary>
-    /// A mote as wide as the figure's radius. Large on paper, and correct in practice: the mote texture is
-    /// a radial gradient, so its visible core is a fraction of its quad, and at these opacities a hundred
-    /// large soft overlapping motes read as a haze around the figure rather than as a hundred objects.
-    /// </summary>
-    public const float DefaultParticleSize = 1f;
+    /// <summary>A fifth of the figure's radius. Soft-edged, so its visible core is smaller again.</summary>
+    public const float DefaultParticleSize = 0.2f;
 
     public const float MinParticleSize = 0f;
 
@@ -580,7 +576,7 @@ public static class PlayerTint
     /// Enough to read as a medium rather than as a countable set of objects, which is what makes the
     /// direction of travel legible without any single mote being noticeable.
     /// </summary>
-    public const int DefaultParticleCount = 100;
+    public const int DefaultParticleCount = 50;
 
     /// <summary>Zero is allowed — it is how you keep the aura and drop the motes.</summary>
     public const int MinParticleCount = 0;

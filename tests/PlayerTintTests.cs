@@ -1255,38 +1255,46 @@ public class ParticleTests
     }
 
     [Fact]
-    public void DarkerParticlesArePulledInward()
+    public void DarkerParticlesTurnAroundTheCentre()
     {
         var motion = AuraParticles.MotionFor(PlayerVariation.Darker);
 
-        Assert.True(motion.RadialAccel < 0f, "darker motes should be drawn toward the centre");
+        Assert.True(motion.Orbit != 0f, "darker motes should circle the figure");
+        Assert.Equal(0f, motion.RadialAccel, 4);
         Assert.Equal(Vector2.Zero, motion.LinearAccel);
     }
 
     [Fact]
-    public void InwardMotesReachTheCentreExactlyAsTheirLifeEnds()
+    public void OrbitIsAnAngularRateSoNothingConvergesOnTheCentre()
     {
-        // The whole of "pulled inward, then fade and disappear when they reach the centre". A mote born one
-        // sigma out must arrive as it finishes fading: too strong and it piles into the middle and swings
-        // back out, too weak and it never gets there.
+        // Why this is expressed as turns per second rather than as a force. Every mote keeps the radius it
+        // was born at, so there is no arrival to time, nothing to overshoot and nothing to damp — the whole
+        // class of problem the inward pull had. Constant tangential acceleration would spiral outward
+        // instead, and a real orbit cannot be held with constants: holding radius r at speed v needs v^2/r
+        // inward, and v grows.
         var motion = AuraParticles.MotionFor(PlayerVariation.Darker);
-        var pull = -motion.RadialAccel;
 
-        // s = at^2 / 2, solved for the distance covered over one lifetime.
-        var travelled = 0.5f * pull * motion.Lifetime * motion.Lifetime;
+        Assert.Equal(0f, motion.Damping, 4);
+        Assert.Equal(motion.Orbit, AuraParticles.Scale(motion, 500f).Orbit, 4);
+    }
+
+    [Fact]
+    public void OutwardMotesTravelAboutAsFarAsTheCloudIsWide()
+    {
+        // Far enough to read as travelling outward, not so far that a mote is off the frame before it has
+        // finished fading in. Solved from s = at^2 / 2 rather than picked.
+        var motion = AuraParticles.MotionFor(PlayerVariation.Brighter);
+        var travelled = 0.5f * motion.RadialAccel * motion.Lifetime * motion.Lifetime;
 
         Assert.Equal(AuraParticles.SpawnSigma, travelled, 3);
     }
 
     [Fact]
-    public void InwardMotesAreDampedSoTheEarlyArrivalsDoNotSwingBack()
+    public void NothingIsDampedNowThatNothingConverges()
     {
-        // Motes born closer than one sigma arrive before their life is up, and a radial pull keeps pointing
-        // at the centre after they pass it — so undamped they oscillate about it. Damping is what turns that
-        // into settling. Nothing else needs it: no other variation has a point it converges on.
-        Assert.True(AuraParticles.MotionFor(PlayerVariation.Darker).Damping > 0f);
-
-        foreach (var v in new[] { PlayerVariation.Brighter, PlayerVariation.Warmer, PlayerVariation.Cooler })
+        // Damping existed solely to stop motes swinging about the centre they were being pulled into.
+        // Nothing is pulled anywhere any more, so nothing needs it.
+        foreach (var v in AllVariations)
         {
             Assert.Equal(0f, AuraParticles.MotionFor(v).Damping, 4);
         }
@@ -1300,6 +1308,7 @@ public class ParticleTests
         // Godot's Y axis points down.
         Assert.True(motion.LinearAccel.Y < 0f, "warmer motes should rise");
         Assert.Equal(0f, motion.RadialAccel, 4);
+        Assert.Equal(0f, motion.Orbit, 4);
     }
 
     [Fact]
@@ -1309,6 +1318,7 @@ public class ParticleTests
 
         Assert.True(motion.LinearAccel.Y > 0f, "cooler motes should fall");
         Assert.Equal(0f, motion.RadialAccel, 4);
+        Assert.Equal(0f, motion.Orbit, 4);
     }
 
     [Fact]
@@ -1323,17 +1333,19 @@ public class ParticleTests
     }
 
     [Fact]
-    public void RadialAndLinearMotionsNeverMix()
+    public void EachVariationIsExactlyOneKindOfMotion()
     {
-        // Each variation is one unambiguous reading. A mote both drifting up and creeping outward is two
-        // signals at once, which is none.
+        // One unambiguous reading each. A mote both drifting up and creeping outward is two signals at
+        // once, which is none.
         foreach (var v in AllVariations)
         {
             var motion = AuraParticles.MotionFor(v);
-            var radial = MathF.Abs(motion.RadialAccel) > 0f;
-            var linear = motion.LinearAccel != Vector2.Zero;
+            var kinds =
+                (MathF.Abs(motion.RadialAccel) > 0f ? 1 : 0)
+                + (motion.LinearAccel != Vector2.Zero ? 1 : 0)
+                + (MathF.Abs(motion.Orbit) > 0f ? 1 : 0);
 
-            Assert.True(radial ^ linear, $"{v} should be radial or linear, not both and not neither");
+            Assert.True(kinds == 1, $"{v} has {kinds} kinds of motion; it should have exactly one");
         }
     }
 
@@ -1351,7 +1363,11 @@ public class ParticleTests
         // Everything is a fraction of the figure's radius, so the effect looks the same on a combat body
         // and on a Sovereign Blade — and, more to the point, so it survives being measured in a
         // SpineSprite's own local units, which are several times larger than a screen pixel.
-        var motion = AuraParticles.MotionFor(PlayerVariation.Darker);
+        var motion = AuraParticles.MotionFor(PlayerVariation.Brighter) with
+        {
+            LinearAccel = new Vector2(0f, 0.2f),
+            Damping = 0.3f,
+        };
 
         var small = AuraParticles.Scale(motion, 100f);
         var large = AuraParticles.Scale(motion, 200f);
@@ -1496,10 +1512,10 @@ public class ParticleTests
     {
         // Not one shared number: the four are not equally visible at equal alpha. White motes over a lit
         // battlefield carry at a tenth where black ones need four times that to read at all.
-        Assert.Equal(0.10f, AuraParticles.MotionFor(PlayerVariation.Brighter).Opacity, 3);
-        Assert.Equal(0.40f, AuraParticles.MotionFor(PlayerVariation.Darker).Opacity, 3);
-        Assert.Equal(0.20f, AuraParticles.MotionFor(PlayerVariation.Warmer).Opacity, 3);
-        Assert.Equal(0.20f, AuraParticles.MotionFor(PlayerVariation.Cooler).Opacity, 3);
+        Assert.Equal(0.25f, AuraParticles.MotionFor(PlayerVariation.Brighter).Opacity, 3);
+        Assert.Equal(1.00f, AuraParticles.MotionFor(PlayerVariation.Darker).Opacity, 3);
+        Assert.Equal(0.50f, AuraParticles.MotionFor(PlayerVariation.Warmer).Opacity, 3);
+        Assert.Equal(0.50f, AuraParticles.MotionFor(PlayerVariation.Cooler).Opacity, 3);
     }
 
     [Fact]
@@ -1536,7 +1552,7 @@ public class ParticleTests
     [Fact]
     public void TheStrengthDialCannotDriveAMotePastFullyOpaque()
     {
-        Assert.Equal(1f, AuraParticles.ColorFor(PlayerVariation.Darker, 99f).A, 4);
+        Assert.Equal(1f, AuraParticles.ColorFor(PlayerVariation.Brighter, 99f).A, 4);
     }
 
     [Theory]
@@ -1569,7 +1585,7 @@ public class ParticleTests
     [Fact]
     public void DefaultParticleCountIsEnoughToReadAsAMedium()
     {
-        Assert.Equal(100, PlayerTint.DefaultParticleCount);
+        Assert.Equal(50, PlayerTint.DefaultParticleCount);
     }
 
     [Fact]
@@ -1612,12 +1628,10 @@ public class ParticleTests
     }
 
     [Fact]
-    public void DefaultParticleSizeIsAMoteAsWideAsTheFiguresRadius()
+    public void DefaultParticleSizeIsAFifthOfTheFiguresRadius()
     {
-        // Large on paper, and correct in practice: the mote texture is a radial gradient, so its visible
-        // core is a fraction of its quad, and at these opacities a hundred large soft overlapping motes
-        // read as a haze around the figure rather than as a hundred objects.
-        Assert.Equal(1f, PlayerTint.DefaultParticleSize, 4);
+        // Soft-edged, so the visible core is smaller again than the number suggests.
+        Assert.Equal(0.2f, PlayerTint.DefaultParticleSize, 4);
         Assert.True(PlayerTint.MaxParticleSize >= PlayerTint.DefaultParticleSize, "the default must be reachable");
     }
 
