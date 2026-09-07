@@ -1120,6 +1120,56 @@ public class AuraTests
     }
 
     [Fact]
+    public void AHintIsConvertedIntoTheArtsOwnSpace()
+    {
+        // The bug behind "the aura does not fit the character art" in v0.1.40. Combat hands over
+        // NCreatureVisuals.Bounds — offsets (-121,-278) to (121,0) on Ironclad — but the aura hangs off
+        // %Visuals, which sits at (5,-19) and is scaled 0.28. Used raw, a 242x278 box became a 242x278 box
+        // in a frame 3.6x smaller: an aura roughly a third of the character's size, floating over its chest.
+        var hint = new Rect2(-121f, -278f, 242f, 278f);
+        var art = new Transform2D(0f, new Vector2(0.28f, 0.28f), 0f, new Vector2(5f, -19f));
+
+        var converted = AuraBounds.HintBounds(hint, art);
+
+        Assert.Equal((-121f - 5f) / 0.28f, converted.Position.X, 1);
+        Assert.Equal((-278f + 19f) / 0.28f, converted.Position.Y, 1);
+        Assert.Equal(242f / 0.28f, converted.Size.X, 1);
+        Assert.Equal(278f / 0.28f, converted.Size.Y, 1);
+    }
+
+    [Fact]
+    public void AHintNeedsNoConversionWhenTheArtSharesItsFrame()
+    {
+        var hint = new Rect2(-50f, -120f, 100f, 120f);
+
+        Assert.Equal(hint, AuraBounds.HintBounds(hint, Transform2D.Identity));
+    }
+
+    [Fact]
+    public void AHintUnderACollapsedTransformIsLeftAlone()
+    {
+        // No inverse to convert through. The unconverted box is wrong, but a box of NaNs is worse: it
+        // fails IsMeasurable and takes the aura away entirely.
+        var hint = new Rect2(-50f, -120f, 100f, 120f);
+        var collapsed = new Transform2D(Vector2.Zero, Vector2.Zero, Vector2.Zero);
+
+        Assert.Equal(hint, AuraBounds.HintBounds(hint, collapsed));
+    }
+
+    [Fact]
+    public void AConvertedHintStillDescribesTheSameFigure()
+    {
+        // Round-trips: whatever space it is expressed in, it has to be the same box on screen.
+        var hint = new Rect2(-121f, -278f, 242f, 278f);
+        var art = new Transform2D(0.4f, new Vector2(0.28f, 0.28f), 0f, new Vector2(5f, -19f));
+
+        var back = art * AuraBounds.HintBounds(hint, art);
+
+        Assert.Equal(hint.GetCenter().X, back.GetCenter().X, 1);
+        Assert.Equal(hint.GetCenter().Y, back.GetCenter().Y, 1);
+    }
+
+    [Fact]
     public void KeepAspectCentredArtIsMeasuredWhereItIsActuallyDrawn()
     {
         // hand_image.tscn's TextureRect is 383x1072 with expand_mode = 1 and stretch_mode = 5, so the arm

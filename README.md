@@ -82,11 +82,19 @@ option is reparenting each figure under a `CanvasGroup`, which changes how addit
 (Ironclad's fire, its eye flame, Regent's effects) and costs a render target per creature — too much to
 risk for an effect that is meant to be barely perceptible.
 
-Measuring the figure is a search rather than a lookup, since a `Node2D` has no bounding box in general:
-the Spine runtime's own `get_bounds()` first, then a `TextureRect`'s art where it is actually drawn (the
-treasure-room arm is letterboxed inside a rect nearly three times its own height, so the raw rect would put
-the glow's peak off the bottom of the screen), then a scene-authored box like `%Bounds` in combat. Whichever
-answered is printed by `tint diag`, because "no aura" and "aura in the wrong place" have different causes.
+Measuring the figure is a search rather than a lookup, since a `Node2D` has no bounding box in general.
+In order: a scene-authored box like combat's `%Bounds`, then the posed skeleton via
+`MegaSprite.GetSkeleton().GetBounds()`, then a `TextureRect`'s art where it is actually drawn (the
+treasure-room arm is letterboxed inside its rect). The authored box wins over the skeleton because it does
+not change with the pose — a lunging attack must not resize somebody's aura.
+
+An authored box is converted into the art's own frame first. Combat's `%Bounds` is a *sibling* of the art,
+not an ancestor: on Ironclad it is 242×278 at (-121,-278) while the art it describes sits at (5,-19) scaled
+0.28. Used raw it lands in a frame 3.6× smaller than the one it was measured in.
+
+Whichever source answered is printed by `tint diag`, along with the skeleton's own box whether or not it
+was used — "no aura" and "aura in the wrong place" have different causes, and combat is the one surface
+with two independent measurements of the same figure to compare.
 
 Two dials, both live: `tint aura <0-1>` for strength and `tint aura spread <0-1>` for reach.
 

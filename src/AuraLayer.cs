@@ -262,7 +262,7 @@ public static class AuraLayer
                 + $"variation={PlayerTint.For(host.Player)?.ToString() ?? "none"} "
                 + $"bounds={host.Bounds.Size.X:F0}x{host.Bounds.Size.Y:F0}"
                 + $"@{host.Bounds.Position.X:F0},{host.Bounds.Position.Y:F0} "
-                + $"source={host.Source} "
+                + $"source={host.Source} spine={Describe(AuraBounds.SpineBounds(art))} "
             + $"artscale={(GodotObject.IsInstanceValid(host.Art) && host.Art.IsInsideTree() ? AuraParticles.GlobalScale(host.Art.GetGlobalTransform()) : 1f):F2} "
                 + $"frame={host.Node.Size.X:F0}x{host.Node.Size.Y:F0}"
                 + $"@{host.Node.Position.X:F0},{host.Node.Position.Y:F0} "
@@ -276,6 +276,20 @@ public static class AuraLayer
 
         return lines;
     }
+
+    /// <summary>
+    /// The skeleton's own box, reported alongside whichever box was actually used.
+    /// </summary>
+    /// <remarks>
+    /// Combat is the one surface with two independent measurements of the same figure — the authored
+    /// %Bounds and the posed skeleton — so printing both is what makes it possible to tell, from outside,
+    /// whether the Spine runtime hands its box back in Godot's y-down convention or its own y-up one. That
+    /// question cannot be settled headlessly: MegaDot ships no Spine extension.
+    /// </remarks>
+    private static string Describe(Rect2? bounds) => bounds == null
+        ? "n/a"
+        : $"{bounds.Value.Size.X:F0}x{bounds.Value.Size.Y:F0}"
+            + $"@{bounds.Value.Position.X:F0},{bounds.Value.Position.Y:F0}";
 
     /// <summary>The particle half of an aura's diag line: are they on, how many, and moving which way.</summary>
     private static string DescribeMotes(AuraHost host)

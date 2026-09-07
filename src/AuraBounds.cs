@@ -1,4 +1,5 @@
 using Godot;
+using MegaCrit.Sts2.Core.Bindings.MegaSpine;
 
 namespace MultiplayerColors;
 
@@ -28,12 +29,6 @@ public enum AuraBoundsSource
 /// </remarks>
 public static class AuraBounds
 {
-    /// <summary>
-    /// The method the Spine runtime binds for a posed skeleton's extent. Present in the shipped
-    /// <c>libspine_godot</c>, but probed rather than assumed — a Spine build without it should cost us an
-    /// aura, not a room.
-    /// </summary>
-    private const string SpineBoundsMethod = "get_bounds";
 
     /// <summary>
     /// The figure's box in <paramref name="art" />'s own local space, or an empty rect when nothing could
@@ -49,16 +44,24 @@ public static class AuraBounds
     /// </remarks>
     public static Rect2 Measure(CanvasItem art, Control? hint, out AuraBoundsSource source)
     {
-        // The tight, posed skeleton box. Preferred wherever it exists: it is the only source that describes
-        // the figure rather than the space the scene reserved for it.
-        if (art.HasMethod(SpineBoundsMethod))
+        // The scene's own box, converted into the art's frame. Preferred over the skeleton because it is
+        // authored per character and does not change with the pose — a lunging attack must not resize
+        // somebody's aura.
+        if (hint != null)
         {
-            var bounds = art.Call(SpineBoundsMethod).AsRect2();
-            if (AuraLayer.IsMeasurable(bounds))
+            var converted = HintBounds(new Rect2(hint.Position, hint.Size), TransformInParent(art));
+            if (AuraLayer.IsMeasurable(converted))
             {
-                source = AuraBoundsSource.Spine;
-                return bounds;
+                source = AuraBoundsSource.Hint;
+                return converted;
             }
+        }
+
+        var skeleton = SpineBounds(art);
+        if (skeleton != null && AuraLayer.IsMeasurable(skeleton.Value))
+        {
+            source = AuraBoundsSource.Spine;
+            return skeleton.Value;
         }
 
         if (art is TextureRect rect)
@@ -71,16 +74,67 @@ public static class AuraBounds
             }
         }
 
-        // A scene-authored box, in the hint's own space. Only usable when the two share a transform, which
-        // is why the patch picks the hint rather than this doing a tree walk to find one.
-        if (hint != null && AuraLayer.IsMeasurable(new Rect2(hint.Position, hint.Size)))
-        {
-            source = AuraBoundsSource.Hint;
-            return new Rect2(hint.Position, hint.Size);
-        }
-
         source = AuraBoundsSource.None;
         return new Rect2();
+    }
+
+    /// <summary>The art's own transform within its parent. CanvasItem does not expose one; its two
+    /// subclasses each spell it differently.</summary>
+    private static Transform2D TransformInParent(CanvasItem art) => art switch
+    {
+        Node2D node => node.Transform,
+        Control control => control.GetTransform(),
+        _ => Transform2D.Identity,
+    };
+
+    /// <summary>
+    /// A scene-authored box, expressed in the art's own coordinates rather than its parent's.
+    /// </summary>
+    /// <remarks>
+    /// The conversion is the whole point. Combat hands over <c>NCreatureVisuals.Bounds</c>, a sibling of
+    /// the art rather than an ancestor of it: on Ironclad that box is 242x278 at (-121,-278), while the
+    /// art it describes sits at (5,-19) and is scaled 0.28. Applied raw — which is what v0.1.29 through
+    /// v0.1.40 did — a 242x278 box lands in a frame 3.6x smaller than the one it was measured in, and the
+    /// aura comes out about a third of the character's size, floating over its chest.
+    ///
+    /// A collapsed transform has no inverse; the unconverted box is wrong, but a box of NaNs is worse,
+    /// since it fails <see cref="AuraLayer.IsMeasurable" /> and takes the aura away altogether.
+    /// </remarks>
+    public static Rect2 HintBounds(Rect2 hintInParent, Transform2D artInParent)
+    {
+        var determinant = (artInParent.X.X * artInParent.Y.Y) - (artInParent.X.Y * artInParent.Y.X);
+
+        return MathF.Abs(determinant) < 1e-6f
+            ? hintInParent
+            : artInParent.AffineInverse() * hintInParent;
+    }
+
+    /// <summary>
+    /// The posed skeleton's box, or <c>null</c> when this is not Spine art or its skeleton is not ready.
+    /// </summary>
+    /// <remarks>
+    /// <c>get_bounds()</c> is bound on the SKELETON, not on the sprite — <c>MegaSkeleton.GetBounds</c>,
+    /// reached through <c>MegaSprite.GetSkeleton()</c>. Probing the sprite for it, which is what v0.1.29
+    /// through v0.1.40 did, always came back false: combat quietly fell through to its hint, and the rest
+    /// site, the shop and the Sovereign Blade — none of which has a hint — got no aura at all.
+    /// </remarks>
+    public static Rect2? SpineBounds(CanvasItem art)
+    {
+        if (art.GetClass() != MegaSprite.spineClassName)
+        {
+            return null;
+        }
+
+        try
+        {
+            return new MegaSprite(art).GetSkeleton()?.GetBounds();
+        }
+        catch (Exception e)
+        {
+            // A skeleton that is not ready is a timing problem, not a reason to take a room down.
+            Diagnostics.Log($"spine bounds unavailable for {art.Name}: {e.Message}");
+            return null;
+        }
     }
 
     /// <summary>
