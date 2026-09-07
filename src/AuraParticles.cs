@@ -70,7 +70,7 @@ public static class AuraParticles
     /// battlefield needs four times what white does to read at all; the base is the dial to move when the
     /// whole effect is too much or too little, and moving it keeps that balance intact.
     /// </remarks>
-    public const float MoteOpacity = 0.15f;
+    public const float MoteOpacity = 0.30f;
 
     /// <summary>
     /// The direction that names a variation. Every variation shares one spawn cloud, one speed and one

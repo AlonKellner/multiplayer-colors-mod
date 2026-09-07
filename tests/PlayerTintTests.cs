@@ -1578,10 +1578,10 @@ public class ParticleTests
     {
         // The four are not equally visible at equal alpha: black over a lit battlefield needs about four
         // times what white does to read at all.
-        Assert.Equal(0.15f * 0.25f, AuraParticles.MotionFor(PlayerVariation.Brighter).Opacity, 4);
-        Assert.Equal(0.15f * 1.00f, AuraParticles.MotionFor(PlayerVariation.Darker).Opacity, 4);
-        Assert.Equal(0.15f * 0.50f, AuraParticles.MotionFor(PlayerVariation.Warmer).Opacity, 4);
-        Assert.Equal(0.15f * 0.50f, AuraParticles.MotionFor(PlayerVariation.Cooler).Opacity, 4);
+        Assert.Equal(0.30f * 0.25f, AuraParticles.MotionFor(PlayerVariation.Brighter).Opacity, 4);
+        Assert.Equal(0.30f * 1.00f, AuraParticles.MotionFor(PlayerVariation.Darker).Opacity, 4);
+        Assert.Equal(0.30f * 0.50f, AuraParticles.MotionFor(PlayerVariation.Warmer).Opacity, 4);
+        Assert.Equal(0.30f * 0.50f, AuraParticles.MotionFor(PlayerVariation.Cooler).Opacity, 4);
     }
 
     [Fact]

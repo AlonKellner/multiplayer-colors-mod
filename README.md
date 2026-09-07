@@ -103,7 +103,7 @@ whose **motion** says the same thing:
 | Warmer | bottom to top | 0.50 × base |
 | Cooler | top to bottom | 0.50 × base |
 
-Opacity is a base (0.15) times a per-variation weight, rather than four independent numbers, because the
+Opacity is a base (0.30) times a per-variation weight, rather than four independent numbers, because the
 two answer different questions. The base is *how present should the motes be at all* — the number to move
 when the whole effect is too much or too little. The weights are *how do the four balance against each
 other*, and they hold because black over a lit battlefield needs about four times what white does to read
