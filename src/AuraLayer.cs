@@ -231,6 +231,12 @@ public static class AuraLayer
     /// <c>source=None</c> means nothing could measure the figure, <c>bounds=0x0</c> means the skeleton was
     /// never posed, <c>shader=NO</c> means the material did not take, <c>MISMATCH</c> means the colour
     /// written is not the colour that arrived.
+    ///
+    /// The box's POSITION is reported alongside its size, not just its extent, because the one thing that
+    /// cannot be checked from outside the game is which way up a measured box is. A creature stands with
+    /// its root at its feet and its art above, so in Godot coordinates a combat figure's box must sit at a
+    /// NEGATIVE y. A positive one would mean the Spine runtime hands back its own y-up convention, and the
+    /// aura is being drawn a whole character-height below the character.
     /// </summary>
     public static IReadOnlyList<string> Describe()
     {
@@ -254,9 +260,12 @@ public static class AuraLayer
             lines.Add(
                 $"{art.Name}[{host.Player.Character?.Id}]: "
                 + $"variation={PlayerTint.For(host.Player)?.ToString() ?? "none"} "
-                + $"bounds={host.Bounds.Size.X:F0}x{host.Bounds.Size.Y:F0} source={host.Source} "
+                + $"bounds={host.Bounds.Size.X:F0}x{host.Bounds.Size.Y:F0}"
+                + $"@{host.Bounds.Position.X:F0},{host.Bounds.Position.Y:F0} "
+                + $"source={host.Source} "
             + $"artscale={(GodotObject.IsInstanceValid(host.Art) && host.Art.IsInsideTree() ? AuraParticles.GlobalScale(host.Art.GetGlobalTransform()) : 1f):F2} "
-                + $"frame={host.Node.Size.X:F0}x{host.Node.Size.Y:F0} "
+                + $"frame={host.Node.Size.X:F0}x{host.Node.Size.Y:F0}"
+                + $"@{host.Node.Position.X:F0},{host.Node.Position.Y:F0} "
                 + $"want=#{expected.ToHtml()} got=#{actual.ToHtml()} "
                 + $"{(matches ? "MATCH" : "MISMATCH")} "
                 + $"ancestors={(MapInkProbe.Accumulated(host.Node).IsEqualApprox(Colors.White) ? "none" : "#" + MapInkProbe.Accumulated(host.Node).ToHtml())} "
